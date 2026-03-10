@@ -51,9 +51,21 @@
   "scr": [
     {"key": "natural", "value": "scrub"}
   ],
+  "ppol": [
+    {"key": "power", "value": "pole"}
+  ],
   "pser": [
     {"key": "highway", "value": "service"},
     {"key": "access", "value": "private"}
+  ],
+  "ptow": [
+    {"key": "power", "value": "tower"}
+  ],
+  "ptran": [
+    {"key": "power", "value": "transformer"}
+  ],
+  "pterm": [
+    {"key": "power", "value": "terminal"}
   ],
   "t": [
     {"key": "natural", "value": "tree"}

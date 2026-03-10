@@ -4,25 +4,18 @@ import logging
 import sys
 import tkinter as tk
 import threading
-import keyboard
 import time
 
 import pyautogui
 import pygetwindow as gw
 import pyperclip
+import keyboard
 
 
-# ----------------------------
-# CONFIGURATION
-# ----------------------------
 CODES_FILE = "codes.json"
 LOG_FILE = "josm_keyboard_sender.log"
-KEY_DELAY = 0.02
 
 
-# ----------------------------
-# LOGGING
-# ----------------------------
 file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
 file_formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 file_handler.setFormatter(file_formatter)
@@ -36,27 +29,21 @@ logging.basicConfig(
 )
 
 
-# ----------------------------
-# LOAD CODES
-# ----------------------------
 def load_codes():
+
     with open(CODES_FILE, "r", encoding="utf-8") as f:
         data = json.load(f)
+
     logging.info("Loaded %d codes", len(data))
     return data
 
 
-# ----------------------------
-# FILTER ONLY ON CODE
-# ----------------------------
 def code_matches_search(code, text):
+
     text = text.lower()
     return text in code.lower()
 
 
-# ----------------------------
-# FOCUS JOSM WINDOW
-# ----------------------------
 def focus_josm_window():
 
     windows = gw.getWindowsWithTitle("Java OpenStreetMap Editor")
@@ -71,21 +58,19 @@ def focus_josm_window():
     try:
         win.activate()
     except:
+
         try:
             win.minimize()
             win.restore()
             win.activate()
         except Exception as e:
-            logging.error("Cannot activate window: %s", e)
+            logging.error("Cannot activate JOSM window: %s", e)
             return False
 
     time.sleep(0.3)
     return True
 
 
-# ----------------------------
-# APPLICATION CLASS
-# ----------------------------
 class CodeForm:
 
     def __init__(self, root):
@@ -105,9 +90,8 @@ class CodeForm:
         self.update_list()
         self.watch_json()
 
-    # ----------------------------
-    # UI
-    # ----------------------------
+        self.register_hotkey()
+
     def build_ui(self):
 
         top = tk.Frame(self.root)
@@ -122,13 +106,10 @@ class CodeForm:
         self.entry.pack(side="left", fill="x", expand=True, padx=5)
 
         self.entry.bind("<Return>", self.apply_code)
+        self.entry.bind("<Down>", self.move_to_list)
 
         apply_btn = tk.Button(top, text="Apply", command=self.apply_code)
         apply_btn.pack(side="right")
-
-        # ----------------------------
-        # LIST
-        # ----------------------------
 
         middle = tk.Frame(self.root)
         middle.pack(fill="both", expand=True, padx=6, pady=6)
@@ -144,30 +125,51 @@ class CodeForm:
 
         self.code_list.config(yscrollcommand=scrollbar.set)
 
-        # ----------------------------
-        # PREVIEW
-        # ----------------------------
-
         preview_frame = tk.LabelFrame(self.root, text="Tag preview")
         preview_frame.pack(fill="both", padx=6, pady=6)
 
         self.preview = tk.Text(preview_frame, height=8)
         self.preview.pack(fill="both", expand=True)
 
-        # ----------------------------
-        # BUTTONS
-        # ----------------------------
-
-        bottom = tk.Frame(self.root)
-
         bottom = tk.Frame(self.root)
         bottom.pack(fill="x", padx=6, pady=6)
 
-        tk.Button(bottom, text="Reload codes", command=self.manual_reload).pack(fill="x")
+        tk.Button(
+            bottom,
+            text="Reload codes",
+            command=self.manual_reload
+        ).pack(fill="x")
 
-    # ----------------------------
-    # CODE INPUT CHANGE
-    # ----------------------------
+    def register_hotkey(self):
+
+        def hotkey_handler():
+
+            logging.info("CTRL+NUM0 detected")
+            print("[INFO] CTRL+NUM0 detected")
+
+            self.root.after(0, self.focus_input)
+
+        keyboard.add_hotkey("ctrl+num 0", hotkey_handler)
+
+    def focus_input(self):
+
+        try:
+
+            self.root.deiconify()
+            self.root.lift()
+            self.root.attributes("-topmost", True)
+
+            self.root.after(
+                10,
+                lambda: self.root.attributes("-topmost", False)
+            )
+
+            self.entry.focus_set()
+            self.entry.select_range(0, tk.END)
+
+        except Exception as e:
+            logging.error("Focus failed: %s", e)
+
     def on_code_change(self, *args):
 
         if self.internal_update:
@@ -175,16 +177,13 @@ class CodeForm:
 
         self.update_list()
 
-    # ----------------------------
-    # UPDATE LIST
-    # ----------------------------
     def update_list(self):
 
         text = self.code_var.get().strip()
 
         self.code_list.delete(0, tk.END)
 
-        for code, pairs in sorted(self.codes.items()):
+        for code in sorted(self.codes):
 
             if text and not code_matches_search(code, text):
                 continue
@@ -192,14 +191,14 @@ class CodeForm:
             self.code_list.insert(tk.END, code)
 
         if self.code_list.size() > 0:
+
             first = self.code_list.get(0)
             self.update_preview(first)
+
         else:
+
             self.preview.delete("1.0", tk.END)
 
-    # ----------------------------
-    # UPDATE PREVIEW
-    # ----------------------------
     def update_preview(self, code):
 
         self.preview.delete("1.0", tk.END)
@@ -207,45 +206,11 @@ class CodeForm:
         if code not in self.codes:
             return
 
-        pairs = self.codes[code]
+        for p in self.codes[code]:
 
-        for p in pairs:
-            self.preview.insert(tk.END, f"{p['key']} = {p['value']}\n")
+            line = f"{p['key']} = {p['value']}\n"
+            self.preview.insert(tk.END, line)
 
-
-    # ----------------------------
-    # HOTKEY
-    # ----------------------------
-    def register_hotkey(self):
-
-        def register_hotkey(self):
-            def hotkey_handler():
-                logging.info("CTRL+< detected")
-                print("[INFO] CTRL+< detected")
-
-                self.root.after(0, self.focus_input)
-
-            keyboard.add_hotkey("ctrl+shift+,", hotkey_handler)
-
-    def focus_input(self):
-
-        try:
-            self.root.deiconify()
-            self.root.lift()
-            self.root.attributes("-topmost", True)
-            self.root.after(10, lambda: self.root.attributes("-topmost", False))
-
-            self.entry.focus_set()
-            self.entry.select_range(0, tk.END)
-
-            logging.info("Form focused")
-
-        except Exception as e:
-            logging.error("Focus failed: %s", e)
-
-    # ----------------------------
-    # CLICK ON LIST
-    # ----------------------------
     def on_list_select(self, event):
 
         selection = self.code_list.curselection()
@@ -261,9 +226,6 @@ class CodeForm:
 
         self.update_preview(code)
 
-    # ----------------------------
-    # DOUBLE CLICK
-    # ----------------------------
     def on_list_double_click(self, event):
 
         selection = self.code_list.curselection()
@@ -279,14 +241,22 @@ class CodeForm:
 
         self.apply_code()
 
-    # ----------------------------
-    # APPLY CODE
-    # ----------------------------
+    def move_to_list(self, event):
+
+        if self.code_list.size() == 0:
+            return
+
+        self.code_list.focus_set()
+        self.code_list.selection_clear(0, tk.END)
+        self.code_list.selection_set(0)
+        self.code_list.activate(0)
+
     def apply_code(self, event=None):
 
         code = self.code_var.get().strip()
 
         if code not in self.codes:
+
             logging.warning("Code not found: %s", code)
             print("[WARN] Code not found:", code)
             return
@@ -304,57 +274,49 @@ class CodeForm:
 
         self.code_var.set("")
 
-    # ----------------------------
-    # SEND TAGS
-    # ----------------------------
     def send_tags_to_josm(self, pairs):
 
         if not focus_josm_window():
+
             print("[ERROR] Cannot activate JOSM")
             return
 
         print("[INFO] Sending tags...")
 
-        pyautogui.hotkey('alt', 'a')
+        pyautogui.hotkey("alt", "a")
 
         time.sleep(0.2)
 
         for i, pair in enumerate(pairs):
 
-            # KEY
+            pyautogui.hotkey("ctrl", "a")
+            pyautogui.press("delete")
 
-            pyautogui.hotkey('ctrl', 'a')
-            pyautogui.press('delete')
+            pyperclip.copy(pair["key"])
+            pyautogui.hotkey("ctrl", "v")
 
-            pyperclip.copy(pair['key'])
-            pyautogui.hotkey('ctrl', 'v')
+            pyautogui.press("tab")
 
-            pyautogui.press('tab')
+            pyautogui.hotkey("ctrl", "a")
+            pyautogui.press("delete")
 
-            # VALUE
-
-            pyautogui.hotkey('ctrl', 'a')
-            pyautogui.press('delete')
-
-            pyperclip.copy(pair['value'])
-            pyautogui.hotkey('ctrl', 'v')
+            pyperclip.copy(pair["value"])
+            pyautogui.hotkey("ctrl", "v")
 
             if i < len(pairs) - 1:
-                pyautogui.hotkey('shift', 'enter')
+                pyautogui.hotkey("shift", "enter")
             else:
-                pyautogui.press('enter')
+                pyautogui.press("enter")
 
         logging.info("Tags sent")
 
-    # ----------------------------
-    # WATCH JSON
-    # ----------------------------
     def manual_reload(self):
 
         logging.info("Manual reload requested")
         print("[INFO] Reloading codes.json")
 
         try:
+
             self.codes = load_codes()
             self.codes_mtime = os.path.getmtime(CODES_FILE)
 
@@ -363,6 +325,7 @@ class CodeForm:
             print("[INFO] Reload completed")
 
         except Exception as e:
+
             logging.error("Reload failed: %s", e)
             print("[ERROR] Reload failed:", e)
 
@@ -372,7 +335,7 @@ class CodeForm:
 
         if mtime != self.codes_mtime:
 
-            logging.info("codes.json reloaded")
+            logging.info("codes.json changed, reloading")
             print("[INFO] codes.json changed, reloading")
 
             self.codes = load_codes()
@@ -383,12 +346,9 @@ class CodeForm:
     def watch_json(self):
 
         self.reload_codes_if_changed()
-        self.root.after(5000, self.watch_json)
+        self.root.after(2000, self.watch_json)
 
 
-# ----------------------------
-# MAIN
-# ----------------------------
 def main():
 
     root = tk.Tk()
