@@ -1,0 +1,8 @@
+josm_tagger/
+    ├── jt-main.py
+    ├── config_manager.py
+    ├── codes_manager.py
+    ├── josm_interface.py
+    └── forms/
+        ├── main_form.py
+        └── tag_editor_form.py
