@@ -114,20 +114,19 @@ class MainForm:
 
     def apply_font(self):
 
-        base_size = int(self.config["font_size"] * self.config.get("ui_scale", 1.0))
-        f = (self.config["font_family"], base_size)
+        size = int(self.config["font_size"] * self.config.get("ui_scale", 1.0))
+        self.current_font = (self.config["font_family"], size)
 
-        # font globale
-        self.root.option_add("*Font", f)
+        # font globale per widget futuri
+        self.root.option_add("*Font", self.current_font)
 
-        # refresh widget già esistenti
-        for w in self.root.winfo_children():
-            self._refresh_widget_fonts(w)
+        # aggiorna widget esistenti (compreso main form)
+        self._refresh_widget_fonts(self.root)
 
     def _refresh_widget_fonts(self, widget):
 
         try:
-            widget.configure(font=(self.config["font_family"], self.config["font_size"]))
+            widget.configure(font=self.current_font)
         except:
             pass
 
