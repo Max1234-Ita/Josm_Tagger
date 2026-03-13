@@ -2,5 +2,9 @@
   "hotkey": "ctrl+num 0",
   "font_family": "Segoe UI",
   "font_size": 12,
-  "ui_scale": 1.0
+  "ui_scale": 1.0,
+  "main_geometry": "560x520+2667+115",
+  "geometry_main": "286x311+3485+72",
+  "geometry_tag_editor": "621x356+2267+411",
+  "geometry_font_selector": "609x419+2585+442"
 }

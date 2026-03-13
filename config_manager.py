@@ -7,7 +7,8 @@ DEFAULT_CONFIG = {
     "hotkey": "ctrl+num 0",
     "font_family": "Segoe UI",
     "font_size": 10,
-    "ui_scale": 1.0
+    "ui_scale": 1.0,
+    "main_geometry": None
 }
 
 

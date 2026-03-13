@@ -1,136 +1,89 @@
 import tkinter as tk
 from tkinter import font
+from forms.base_form import BaseForm
 
 
-class FontSelectorForm(tk.Toplevel):
+class FontSelectorForm(BaseForm):
 
-    def __init__(self, parent, config, save_callback):
+    def __init__(self, parent, config, callback):
 
-        super().__init__(parent)
+        super().__init__(parent, "font_selector")
 
-        self.config_data = config
-        self.save_callback = save_callback
+        self.title("Font")
 
-        self.title("Select Font")
-        self.geometry("420x520")
-
-        self.font_family = tk.StringVar(value=config["font_family"])
-        self.font_size = tk.IntVar(value=config["font_size"])
-        self.search_var = tk.StringVar()
+        self.config = config
+        self.callback = callback
 
         self.build_ui()
-        self.populate_fonts()
 
     def build_ui(self):
 
-        search_frame = tk.Frame(self)
-        search_frame.pack(fill="x", padx=8, pady=5)
+        frame = tk.Frame(self)
+        frame.pack(fill="both", expand=True, padx=10, pady=10)
 
-        tk.Label(search_frame, text="Search").pack(anchor="w")
+        tk.Label(frame, text="Font family").pack(anchor="w")
 
-        search_entry = tk.Entry(search_frame, textvariable=self.search_var)
-        search_entry.pack(fill="x")
+        self.search = tk.StringVar()
+        self.search.trace_add("write", self.filter_fonts)
 
-        search_entry.bind("<KeyRelease>", self.filter_fonts)
+        entry = tk.Entry(frame, textvariable=self.search)
+        entry.pack(fill="x", pady=4)
 
-        # font list
+        list_frame = tk.Frame(frame)
+        list_frame.pack(fill="both", expand=True)
 
-        list_frame = tk.Frame(self)
-        list_frame.pack(fill="both", expand=True, padx=8)
+        self.listbox = tk.Listbox(list_frame)
 
-        self.font_list = tk.Listbox(list_frame)
+        scrollbar = tk.Scrollbar(list_frame)
 
-        scroll = tk.Scrollbar(list_frame)
+        scrollbar.pack(side="right", fill="y")
+        self.listbox.pack(fill="both", expand=True, side="left")
 
-        scroll.pack(side="right", fill="y")
-        self.font_list.pack(side="left", fill="both", expand=True)
+        self.listbox.config(yscrollcommand=scrollbar.set)
+        scrollbar.config(command=self.listbox.yview)
 
-        self.font_list.config(yscrollcommand=scroll.set)
-        scroll.config(command=self.font_list.yview)
+        tk.Label(frame, text="Font size").pack(anchor="w", pady=(10,0))
 
-        self.font_list.bind("<<ListboxSelect>>", self.update_preview)
+        self.size = tk.Spinbox(frame, from_=6, to=40)
+        self.size.delete(0, "end")
+        self.size.insert(0, self.config["font_size"])
+        self.size.pack(anchor="w")
 
-        # size
+        apply_btn = tk.Button(frame, text="Apply", command=self.apply_font)
+        apply_btn.pack(pady=8)
 
-        size_frame = tk.Frame(self)
-        size_frame.pack(fill="x", padx=8, pady=6)
+        self.all_fonts = sorted(font.families())
+        self.filtered = self.all_fonts.copy()
 
-        tk.Label(size_frame, text="Size").pack(anchor="w")
+        for f in self.filtered:
+            self.listbox.insert("end", f)
 
-        self.size_spin = tk.Spinbox(
-            size_frame,
-            from_=6,
-            to=40,
-            textvariable=self.font_size,
-            width=5,
-            command=self.update_preview
-        )
+    def filter_fonts(self, *args):
 
-        self.size_spin.pack(anchor="w")
+        text = self.search.get().lower()
 
-        # preview
+        self.listbox.delete(0, "end")
 
-        preview_frame = tk.Frame(self)
-        preview_frame.pack(fill="x", padx=8, pady=10)
-
-        tk.Label(preview_frame, text="Preview").pack(anchor="w")
-
-        self.preview_label = tk.Label(
-            preview_frame,
-            text="The quick brown fox jumps over the lazy dog"
-        )
-
-        self.preview_label.pack(fill="x")
-
-        # buttons
-
-        btn_frame = tk.Frame(self)
-        btn_frame.pack(fill="x", pady=10, padx=8)
-
-        tk.Button(btn_frame, text="Apply", command=self.apply).pack(side="right")
-
-    def populate_fonts(self):
-
-        self.all_fonts = list(font.families())
-        self.all_fonts.sort()
-
-        self.font_list.delete(0, tk.END)
+        self.filtered = []
 
         for f in self.all_fonts:
-            self.font_list.insert(tk.END, f)
-
-    def filter_fonts(self, event=None):
-
-        text = self.search_var.get().lower()
-
-        self.font_list.delete(0, tk.END)
-
-        for f in self.all_fonts:
-
             if text in f.lower():
-                self.font_list.insert(tk.END, f)
+                self.filtered.append(f)
+                self.listbox.insert("end", f)
 
-    def update_preview(self, event=None):
+    def apply_font(self):
 
-        sel = self.font_list.curselection()
+        sel = self.listbox.curselection()
 
-        if sel:
-            self.font_family.set(self.font_list.get(sel[0]))
+        if not sel:
+            return
 
-        f = (self.font_family.get(), self.font_size.get())
+        family = self.listbox.get(sel[0])
+        size = int(self.size.get())
 
-        self.preview_label.config(font=f)
+        self.config["font_family"] = family
+        self.config["font_size"] = size
 
-    def apply(self):
-
-        sel = self.font_list.curselection()
-
-        if sel:
-            self.font_family.set(self.font_list.get(sel[0]))
-
-        self.config_data["font_family"] = self.font_family.get()
-        self.config_data["font_size"] = int(self.font_size.get())
-
-        self.save_callback(self.config_data)
+        self.callback(self.config)
 
         self.destroy()

@@ -1,15 +1,13 @@
 import tkinter as tk
-
-from tkinter import font
-from forms.font_selector_form import FontSelectorForm
-
 import threading
 import keyboard
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
 from josm_interface import send_tags
+
 from forms.tag_editor_form import TagEditorForm
+from forms.font_selector_form import FontSelectorForm
 
 
 class MainForm:
@@ -17,20 +15,67 @@ class MainForm:
     def __init__(self, root):
 
         self.root = root
+
         self.config = load_config()
         self.codes = load_codes()
 
+        self.base_geometry = (560, 520)
+
         root.title("JOSM Tagger")
-        root.geometry("560x520")
+        root.attributes("-topmost", True)
+
+        self._restore_geometry()
+        root.bind("<Configure>", self._save_geometry)
 
         self.filtered_codes = []
 
+        # finestre secondarie (single instance)
+        self.tag_editor_window = None
+        self.font_selector_window = None
+
         self.build_menu()
         self.build_ui()
+        self._internal_resize = False
+
         self.register_hotkey()
 
         self.apply_font()
         self.update_list()
+
+
+    # ------------------------------
+    # GEOMETRY MANAGEMENT
+    # ------------------------------
+
+    def _restore_geometry(self):
+
+        geom = self.config.get("geometry_main")
+
+        if geom:
+            self.root.geometry(geom)
+        else:
+            w, h = self.base_geometry
+            scale = self.config.get("ui_scale", 1.0)
+            self.root.geometry(f"{int(w*scale)}x{int(h*scale)}")
+
+    def _save_geometry(self, event=None):
+
+        if self._internal_resize:
+            return
+
+        geom = self.root.geometry()
+
+        cfg = load_config()
+
+        if cfg.get("geometry_main") != geom:
+            cfg["geometry_main"] = geom
+            save_config(cfg)
+
+        self.config = cfg
+
+    # ------------------------------
+    # MENU
+    # ------------------------------
 
     def build_menu(self):
 
@@ -54,6 +99,10 @@ class MainForm:
 
         self.root.config(menu=self.menubar)
 
+    # ------------------------------
+    # UI
+    # ------------------------------
+
     def build_ui(self):
 
         top = tk.Frame(self.root)
@@ -73,7 +122,9 @@ class MainForm:
         self.apply_button = tk.Button(top, text="Apply", command=self.apply_code)
         self.apply_button.pack(side="right")
 
+        # --------------------
         # CODE LIST
+        # --------------------
 
         list_frame = tk.Frame(self.root)
         list_frame.pack(fill="both", expand=True, padx=6)
@@ -92,7 +143,9 @@ class MainForm:
         self.code_list.bind("<Double-Button-1>", self.apply_from_list)
         self.code_list.bind("<Return>", self.apply_from_list)
 
+        # --------------------
         # PREVIEW
+        # --------------------
 
         preview_frame = tk.Frame(self.root)
         preview_frame.pack(fill="both", expand=False, padx=6, pady=6)
@@ -112,21 +165,24 @@ class MainForm:
         self.preview.config(yscrollcommand=scrollbar_preview.set)
         scrollbar_preview.config(command=self.preview.yview)
 
+    # ------------------------------
+    # FONT MANAGEMENT
+    # ------------------------------
+
     def apply_font(self):
 
-        size = int(self.config["font_size"] * self.config.get("ui_scale", 1.0))
-        self.current_font = (self.config["font_family"], size)
+        base_size = int(self.config["font_size"] * self.config.get("ui_scale", 1.0))
+        f = (self.config["font_family"], base_size)
 
-        # font globale per widget futuri
-        self.root.option_add("*Font", self.current_font)
+        self.root.option_add("*Font", f)
 
-        # aggiorna widget esistenti (compreso main form)
-        self._refresh_widget_fonts(self.root)
+        for w in self.root.winfo_children():
+            self._refresh_widget_fonts(w)
 
     def _refresh_widget_fonts(self, widget):
 
         try:
-            widget.configure(font=self.current_font)
+            widget.configure(font=(self.config["font_family"], self.config["font_size"]))
         except:
             pass
 
@@ -135,7 +191,12 @@ class MainForm:
 
     def select_font(self):
 
-        FontSelectorForm(
+        if self.font_selector_window and self.font_selector_window.winfo_exists():
+            self.font_selector_window.lift()
+            self.font_selector_window.focus_force()
+            return
+
+        self.font_selector_window = FontSelectorForm(
             self.root,
             self.config,
             self.apply_font_config
@@ -143,13 +204,14 @@ class MainForm:
 
     def apply_font_config(self, new_config):
 
-        from config_manager import save_config
-
         self.config = new_config
-
         save_config(self.config)
 
         self.apply_font()
+
+    # ------------------------------
+    # UI SCALE
+    # ------------------------------
 
     def select_ui_scale(self):
 
@@ -167,10 +229,21 @@ class MainForm:
             return
 
         self.config["ui_scale"] = scale
-        from config_manager import save_config
         save_config(self.config)
 
-        self.apply_font()  # applica font + scala
+        w, h = self.base_geometry
+
+        self._internal_resize = True
+        self.root.geometry(f"{int(w * scale)}x{int(h * scale)}")
+        self._internal_resize = False
+
+        self._save_geometry()
+
+        self.apply_font()
+
+    # ------------------------------
+    # HOTKEY
+    # ------------------------------
 
     def register_hotkey(self):
 
@@ -187,8 +260,13 @@ class MainForm:
 
         self.root.deiconify()
         self.root.lift()
+
         self.entry.focus_set()
         self.entry.select_range(0, tk.END)
+
+    # ------------------------------
+    # LIST MANAGEMENT
+    # ------------------------------
 
     def update_list(self):
 
@@ -225,6 +303,10 @@ class MainForm:
 
         self.update_preview()
 
+    # ------------------------------
+    # TAG PREVIEW
+    # ------------------------------
+
     def update_preview(self, event=None):
 
         self.preview.delete(0, tk.END)
@@ -244,6 +326,10 @@ class MainForm:
 
         for t in self.codes[code]:
             self.preview.insert(tk.END, f"{t['key']} = {t['value']}")
+
+    # ------------------------------
+    # APPLY TAGS
+    # ------------------------------
 
     def apply_from_list(self, event=None):
 
@@ -280,11 +366,31 @@ class MainForm:
             daemon=True
         ).start()
 
+        self.root.after(0, self._reset_input)
+
+    def _reset_input(self):
+
+        self.code_var.set("")
+        # self.entry.focus_set()
+
+    # ------------------------------
+    # DATA
+    # ------------------------------
+
     def reload_codes(self):
 
         self.codes = load_codes()
         self.update_list()
 
+    # ------------------------------
+    # WINDOWS
+    # ------------------------------
+
     def open_editor(self):
 
-        TagEditorForm(self.root, self.codes)
+        if self.tag_editor_window and self.tag_editor_window.winfo_exists():
+            self.tag_editor_window.lift()
+            self.tag_editor_window.focus_force()
+            return
+
+        self.tag_editor_window = TagEditorForm(self.root, self.codes)

@@ -73,8 +73,16 @@
   "tr": [
     {"key": "natural", "value": "tree_row"}
   ],
-  "tk": [
+  "tt": [
     {"key": "highway", "value": "track"}
+  ],
+  "tt1": [
+    {"key": "highway", "value": "track"},
+    {"key": "tracktype", "value": "grade1"}
+  ],
+  "tt2": [
+    {"key": "highway", "value": "track"},
+    {"key": "tracktype", "value": "grade2"}
   ],
   "tt3": [
     {"key": "highway", "value": "track"},
