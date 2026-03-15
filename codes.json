@@ -1,110 +1,310 @@
 {
-  "acp": [
-    {"key": "access", "value": "private"}
-  ],
-  "bf": [
-    {"key": "barrier", "value": "fence"}
-  ],
-  "bg": [
-    {"key": "barrier", "value": "gate"}
-  ],
-  "bh": [
-    {"key": "barrier", "value": "hedge"}
-  ],
-  "bw": [
-    {"key": "barrier", "value": "wall"}
-  ],
-  "bk": [
-    {"key": "barrier", "value": "kerb"}
-  ],
-  "b": [
-    {"key": "building", "value": "yes"}
-  ],
-  "eny": [
-    {"key": "entrance", "value": "yes"}
-  ],
-  "fland": [
-    {"key": "landuse", "value": "farmland"}
-  ],
-  "farmy": [
-    {"key": "landuse", "value": "farmyard"}
-  ],
-  "hf": [
-    {"key": "highway", "value": "footway"}
-  ],
-  "noa": [
-    {"key": "note:it", "value": "Allineato a CTR-DBT Lombardia"}
-  ],
-   "pfw": [
-    {"key": "highway", "value": "footway"},
-    {"key": "access", "value": "private"}
-  ],
-  "wd": [
-    {"key": "natural", "value": "wood"}
-  ],
-  "for": [
-    {"key": "landuse", "value": "forest"}
-  ],
-  "orc": [
-    {"key": "landuse", "value": "orchard"}
-  ],
-  "scr": [
-    {"key": "natural", "value": "scrub"}
-  ],
-  "ppol": [
-    {"key": "power", "value": "pole"}
-  ],
-  "pser": [
-    {"key": "highway", "value": "service"},
-    {"key": "access", "value": "private"}
-  ],
-  "ptow": [
-    {"key": "power", "value": "tower"}
-  ],
-  "ptran": [
-    {"key": "power", "value": "transformer"}
-  ],
-  "pterm": [
-    {"key": "power", "value": "terminal"}
-  ],
-  "t": [
-    {"key": "natural", "value": "tree"}
-  ],
-  "tr": [
-    {"key": "natural", "value": "tree_row"}
-  ],
-  "tt": [
-    {"key": "highway", "value": "track"}
-  ],
-  "tt1": [
-    {"key": "highway", "value": "track"},
-    {"key": "tracktype", "value": "grade1"}
-  ],
-  "tt2": [
-    {"key": "highway", "value": "track"},
-    {"key": "tracktype", "value": "grade2"}
-  ],
-  "tt3": [
-    {"key": "highway", "value": "track"},
-    {"key": "tracktype", "value": "grade3"}
-  ],
-  "tt4": [
-    {"key": "highway", "value": "track"},
-    {"key": "tracktype", "value": "grade4"}
-  ],
-  "tt5": [
-    {"key": "highway", "value": "track"},
-    {"key": "tracktype", "value": "grade5"}
-  ],
-  "tub": [
-    {"key": "tunnel", "value": "building_passage"},
-    {"key": "layer", "value": "-1"}
-  ],
-  "tuc": [
-    {"key": "tunnel", "value": "culvert"},
-    {"key": "layer", "value": "-1"}
-  ],
-  "wad": [
-    {"key": "waterway", "value": "ditch"}
-  ]
+    "acp": [
+        {
+            "key": "access",
+            "value": "private"
+        }
+    ],
+    "bf": [
+        {
+            "key": "barrier",
+            "value": "fence"
+        }
+    ],
+    "bg": [
+        {
+            "key": "barrier",
+            "value": "gate"
+        }
+    ],
+    "bh": [
+        {
+            "key": "barrier",
+            "value": "hedge"
+        }
+    ],
+    "bw": [
+        {
+            "key": "barrier",
+            "value": "wall"
+        }
+    ],
+    "bk": [
+        {
+            "key": "barrier",
+            "value": "kerb"
+        }
+    ],
+    "b": [
+        {
+            "key": "building",
+            "value": "yes"
+        }
+    ],
+    "eny": [
+        {
+            "key": "entrance",
+            "value": "yes"
+        }
+    ],
+    "fland": [
+        {
+            "key": "landuse",
+            "value": "farmland"
+        }
+    ],
+    "farmy": [
+        {
+            "key": "landuse",
+            "value": "farmyard"
+        }
+    ],
+    "hf": [
+        {
+            "key": "highway",
+            "value": "footway"
+        }
+    ],
+    "noa": [
+        {
+            "key": "note:it",
+            "value": "Allineato a CTR-DBT Lombardia"
+        }
+    ],
+    "pfw": [
+        {
+            "key": "highway",
+            "value": "footway"
+        },
+        {
+            "key": "access",
+            "value": "private"
+        }
+    ],
+    "wd": [
+        {
+            "key": "natural",
+            "value": "wood"
+        }
+    ],
+    "for": [
+        {
+            "key": "landuse",
+            "value": "forest"
+        }
+    ],
+    "orc": [
+        {
+            "key": "landuse",
+            "value": "orchard"
+        }
+    ],
+    "scr": [
+        {
+            "key": "natural",
+            "value": "scrub"
+        }
+    ],
+    "ppol": [
+        {
+            "key": "power",
+            "value": "pole"
+        }
+    ],
+    "pser": [
+        {
+            "key": "highway",
+            "value": "service"
+        },
+        {
+            "key": "access",
+            "value": "private"
+        }
+    ],
+    "ptow": [
+        {
+            "key": "power",
+            "value": "tower"
+        }
+    ],
+    "ptran": [
+        {
+            "key": "power",
+            "value": "transformer"
+        }
+    ],
+    "pterm": [
+        {
+            "key": "power",
+            "value": "terminal"
+        }
+    ],
+    "t": [
+        {
+            "key": "natural",
+            "value": "tree"
+        }
+    ],
+    "tr": [
+        {
+            "key": "natural",
+            "value": "tree_row"
+        }
+    ],
+    "tt": [
+        {
+            "key": "highway",
+            "value": "track"
+        }
+    ],
+    "tt1": [
+        {
+            "key": "highway",
+            "value": "track"
+        },
+        {
+            "key": "tracktype",
+            "value": "grade1"
+        }
+    ],
+    "tt2": [
+        {
+            "key": "highway",
+            "value": "track"
+        },
+        {
+            "key": "tracktype",
+            "value": "grade2"
+        }
+    ],
+    "tt3": [
+        {
+            "key": "highway",
+            "value": "track"
+        },
+        {
+            "key": "tracktype",
+            "value": "grade3"
+        }
+    ],
+    "tt4": [
+        {
+            "key": "highway",
+            "value": "track"
+        },
+        {
+            "key": "tracktype",
+            "value": "grade4"
+        }
+    ],
+    "tt5": [
+        {
+            "key": "highway",
+            "value": "track"
+        },
+        {
+            "key": "tracktype",
+            "value": "grade5"
+        }
+    ],
+    "tub": [
+        {
+            "key": "tunnel",
+            "value": "building_passage"
+        },
+        {
+            "key": "layer",
+            "value": "-1"
+        }
+    ],
+    "tuc": [
+        {
+            "key": "tunnel",
+            "value": "culvert"
+        },
+        {
+            "key": "layer",
+            "value": "-1"
+        }
+    ],
+    "wad": [
+        {
+            "key": "waterway",
+            "value": "ditch"
+        }
+    ],
+    "bug": [
+        {
+            "key": "building",
+            "value": "garage"
+        }
+    ],
+    "leig": [
+        {
+            "key": "leisure",
+            "value": "garden"
+        }
+    ],
+    "buy": [
+        {
+            "key": "building",
+            "value": "yes"
+        }
+    ],
+    "buc": [
+        {
+            "key": "building",
+            "value": "church"
+        }
+    ],
+    "null": [
+        {
+            "key": "tourism",
+            "value": "artwork"
+        },
+        {
+            "key": "artwork_type",
+            "value": "statue"
+        }
+    ],
+    "flink": [
+        {
+            "key": "higway",
+            "value": "footway"
+        },
+        {
+            "key": "footway",
+            "value": "link"
+        }
+    ],
+    "statue": [
+        {
+            "key": "tourism",
+            "value": "artwork"
+        },
+        {
+            "key": "artwork_type",
+            "value": "statue"
+        }
+    ],
+    "installation": [
+        {
+            "key": "tourism",
+            "value": "artwork"
+        },
+        {
+            "key": "artwork_type",
+            "value": "installation"
+        }
+    ],
+    "pond": [
+        {
+            "key": "natural",
+            "value": "water"
+        },
+        {
+            "key": "water",
+            "value": "pond"
+        }
+    ]
 }

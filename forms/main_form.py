@@ -2,7 +2,7 @@ import tkinter as tk
 import threading
 import keyboard
 
-from config_manager import load_config, save_config
+from config_manager import load_config
 from codes_manager import load_codes
 from josm_interface import send_tags
 
@@ -13,128 +13,74 @@ from forms.font_selector_form import FontSelectorForm
 class MainForm:
 
     def __init__(self, root):
-
         self.root = root
-
         self.config = load_config()
         self.codes = load_codes()
 
-        self.base_geometry = (560, 520)
-
         root.title("JOSM Tagger")
+        root.geometry("560x520")
         root.attributes("-topmost", True)
-
-        self._restore_geometry()
-        root.bind("<Configure>", self._save_geometry)
 
         self.filtered_codes = []
 
-        # finestre secondarie (single instance)
-        self.tag_editor_window = None
-        self.font_selector_window = None
+        self.tag_editor = None
 
         self.build_menu()
         self.build_ui()
-        self._internal_resize = False
-
-        self.register_hotkey()
-
         self.apply_font()
         self.update_list()
+        self.register_hotkey()
 
+        root.bind("<<Hotkey>>", self.focus_input_event)
 
-    # ------------------------------
-    # GEOMETRY MANAGEMENT
-    # ------------------------------
-
-    def _restore_geometry(self):
-
-        geom = self.config.get("geometry_main")
-
-        if geom:
-            self.root.geometry(geom)
-        else:
-            w, h = self.base_geometry
-            scale = self.config.get("ui_scale", 1.0)
-            self.root.geometry(f"{int(w*scale)}x{int(h*scale)}")
-
-    def _save_geometry(self, event=None):
-
-        if self._internal_resize:
-            return
-
-        geom = self.root.geometry()
-
-        cfg = load_config()
-
-        if cfg.get("geometry_main") != geom:
-            cfg["geometry_main"] = geom
-            save_config(cfg)
-
-        self.config = cfg
-
-    # ------------------------------
-    # MENU
-    # ------------------------------
-
+    # ---------------- Menu ----------------
     def build_menu(self):
+        menubar = tk.Menu(self.root)
 
-        self.menubar = tk.Menu(self.root)
+        file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Reload codes", command=self.reload_codes)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self.root.quit)
 
-        self.file_menu = tk.Menu(self.menubar, tearoff=0)
-        self.file_menu.add_command(label="Reload tags", command=self.reload_codes)
-        self.file_menu.add_separator()
-        self.file_menu.add_command(label="Exit", command=self.root.quit)
+        edit_menu = tk.Menu(menubar, tearoff=0)
+        edit_menu.add_command(label="Tags & Codes", command=self.open_editor)
 
-        self.edit_menu = tk.Menu(self.menubar, tearoff=0)
-        self.edit_menu.add_command(label="Tags & Codes", command=self.open_editor)
+        view_menu = tk.Menu(menubar, tearoff=0)
+        view_menu.add_command(label="Font", command=self.select_font)
 
-        self.view_menu = tk.Menu(self.menubar, tearoff=0)
-        self.view_menu.add_command(label="Font", command=self.select_font)
-        self.view_menu.add_command(label="UI Scale", command=self.select_ui_scale)
+        menubar.add_cascade(label="File", menu=file_menu)
+        menubar.add_cascade(label="Edit", menu=edit_menu)
+        menubar.add_cascade(label="View", menu=view_menu)
 
-        self.menubar.add_cascade(label="File", menu=self.file_menu)
-        self.menubar.add_cascade(label="Edit", menu=self.edit_menu)
-        self.menubar.add_cascade(label="View", menu=self.view_menu)
+        self.root.config(menu=menubar)
 
-        self.root.config(menu=self.menubar)
-
-    # ------------------------------
-    # UI
-    # ------------------------------
-
+    # ---------------- UI ----------------
     def build_ui(self):
-
         top = tk.Frame(self.root)
         top.pack(fill="x", padx=6, pady=6)
 
-        tk.Label(top, text="Code:").pack(side="left")
+        tk.Label(top, text="Code").pack(side="left")
 
         self.code_var = tk.StringVar()
         self.code_var.trace_add("write", self.filter_codes)
 
         self.entry = tk.Entry(top, textvariable=self.code_var)
-        self.entry.pack(fill="x", expand=True, side="left", padx=4)
-
+        self.entry.pack(side="left", fill="x", expand=True, padx=4)
         self.entry.bind("<Return>", self.apply_code)
         self.entry.bind("<Down>", self.focus_list)
 
-        self.apply_button = tk.Button(top, text="Apply", command=self.apply_code)
-        self.apply_button.pack(side="right")
+        self.apply_btn = tk.Button(top, text="Apply", command=self.apply_code)
+        self.apply_btn.pack(side="right")
 
-        # --------------------
-        # CODE LIST
-        # --------------------
+        # Lista codici
+        frame_list = tk.Frame(self.root)
+        frame_list.pack(fill="both", expand=True, padx=6)
 
-        list_frame = tk.Frame(self.root)
-        list_frame.pack(fill="both", expand=True, padx=6)
+        self.code_list = tk.Listbox(frame_list)
+        self.code_list.pack(side="left", fill="both", expand=True)
 
-        self.code_list = tk.Listbox(list_frame)
-
-        scrollbar = tk.Scrollbar(list_frame)
-
+        scrollbar = tk.Scrollbar(frame_list)
         scrollbar.pack(side="right", fill="y")
-        self.code_list.pack(fill="both", expand=True, side="left")
 
         self.code_list.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.code_list.yview)
@@ -142,255 +88,175 @@ class MainForm:
         self.code_list.bind("<<ListboxSelect>>", self.update_preview)
         self.code_list.bind("<Double-Button-1>", self.apply_from_list)
         self.code_list.bind("<Return>", self.apply_from_list)
+        self.code_list.bind("<Button-3>", self.show_context_menu)
 
-        # --------------------
-        # PREVIEW
-        # --------------------
+        # menu contestuale
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="Use", command=self.context_use)
+        self.context_menu.add_command(label="Edit", command=self.context_edit)
 
-        preview_frame = tk.Frame(self.root)
-        preview_frame.pack(fill="both", expand=False, padx=6, pady=6)
+        # Preview
+        frame_preview = tk.Frame(self.root)
+        frame_preview.pack(fill="both", padx=6, pady=6)
 
-        tk.Label(preview_frame, text="Tag preview").pack(anchor="w")
+        tk.Label(frame_preview, text="Tag preview").pack(anchor="w")
 
-        preview_inner = tk.Frame(preview_frame)
-        preview_inner.pack(fill="both", expand=True)
+        frame_preview_list = tk.Frame(frame_preview)
+        frame_preview_list.pack(fill="both", expand=True)
 
-        self.preview = tk.Listbox(preview_inner, height=6)
+        self.preview = tk.Listbox(frame_preview_list, height=6)
+        self.preview.pack(side="left", fill="both", expand=True)
 
-        scrollbar_preview = tk.Scrollbar(preview_inner)
+        scroll_preview = tk.Scrollbar(frame_preview_list)
+        scroll_preview.pack(side="right", fill="y")
 
-        scrollbar_preview.pack(side="right", fill="y")
-        self.preview.pack(fill="both", expand=True, side="left")
+        self.preview.config(yscrollcommand=scroll_preview.set)
+        scroll_preview.config(command=self.preview.yview)
 
-        self.preview.config(yscrollcommand=scrollbar_preview.set)
-        scrollbar_preview.config(command=self.preview.yview)
-
-    # ------------------------------
-    # FONT MANAGEMENT
-    # ------------------------------
-
-    def apply_font(self):
-
-        base_size = int(self.config["font_size"] * self.config.get("ui_scale", 1.0))
-        f = (self.config["font_family"], base_size)
-
-        self.root.option_add("*Font", f)
-
-        for w in self.root.winfo_children():
-            self._refresh_widget_fonts(w)
-
-    def _refresh_widget_fonts(self, widget):
-
-        try:
-            widget.configure(font=(self.config["font_family"], self.config["font_size"]))
-        except:
-            pass
-
-        for child in widget.winfo_children():
-            self._refresh_widget_fonts(child)
-
-    def select_font(self):
-
-        if self.font_selector_window and self.font_selector_window.winfo_exists():
-            self.font_selector_window.lift()
-            self.font_selector_window.focus_force()
+    # ---------------- Contestuale ----------------
+    def show_context_menu(self, event):
+        index = self.code_list.nearest(event.y)
+        if index < 0:
             return
+        self.code_list.selection_clear(0, tk.END)
+        self.code_list.selection_set(index)
+        self.context_menu.tk_popup(event.x_root, event.y_root)
 
-        self.font_selector_window = FontSelectorForm(
-            self.root,
-            self.config,
-            self.apply_font_config
-        )
-
-    def apply_font_config(self, new_config):
-
-        self.config = new_config
-        save_config(self.config)
-
-        self.apply_font()
-
-    # ------------------------------
-    # UI SCALE
-    # ------------------------------
-
-    def select_ui_scale(self):
-
-        import tkinter.simpledialog as sd
-
-        scale = sd.askfloat(
-            "UI Scale",
-            "Scale factor (0.5–3.0):",
-            initialvalue=self.config.get("ui_scale", 1.0),
-            minvalue=0.5,
-            maxvalue=3.0
-        )
-
-        if scale is None:
+    def context_use(self):
+        sel = self.code_list.curselection()
+        if not sel:
             return
+        code = self.code_list.get(sel[0])
+        self.send(code)
 
-        self.config["ui_scale"] = scale
-        save_config(self.config)
+    def context_edit(self):
+        sel = self.code_list.curselection()
+        if not sel:
+            return
+        code = self.code_list.get(sel[0])
 
-        w, h = self.base_geometry
+        if self.tag_editor and self.tag_editor.root.winfo_exists():
+            self.tag_editor.root.deiconify()
+            self.tag_editor.root.lift()
+            self.tag_editor.load_code(code)
+        else:
+            self.tag_editor = TagEditorForm(
+                self.root,
+                self.codes,
+                self.reload_codes,
+                self.config,
+                preload_code=code
+            )
 
-        self._internal_resize = True
-        self.root.geometry(f"{int(w * scale)}x{int(h * scale)}")
-        self._internal_resize = False
-
-        self._save_geometry()
-
-        self.apply_font()
-
-    # ------------------------------
-    # HOTKEY
-    # ------------------------------
-
+    # ---------------- Hotkey ----------------
     def register_hotkey(self):
-
         keyboard.add_hotkey(
             self.config.get("hotkey", "ctrl+num 0"),
             self.hotkey_trigger
         )
 
     def hotkey_trigger(self):
+        self.root.event_generate("<<Hotkey>>", when="tail")
 
-        self.root.after(0, self.focus_input)
-
-    def focus_input(self):
-
+    def focus_input_event(self, event):
         self.root.deiconify()
         self.root.lift()
-
+        self.root.focus_force()
         self.entry.focus_set()
         self.entry.select_range(0, tk.END)
 
-    # ------------------------------
-    # LIST MANAGEMENT
-    # ------------------------------
-
+    # ---------------- Lista e Preview ----------------
     def update_list(self):
-
         self.code_list.delete(0, tk.END)
-
         self.filtered_codes = sorted(self.codes)
-
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
 
     def filter_codes(self, *args):
-
         text = self.code_var.get().lower()
-
         self.code_list.delete(0, tk.END)
-
         self.filtered_codes = []
-
         for c in sorted(self.codes):
-
             if text in c.lower():
                 self.filtered_codes.append(c)
                 self.code_list.insert(tk.END, c)
-
         self.update_preview()
 
-    def focus_list(self, event):
+    def update_preview(self, event=None):
+        self.preview.delete(0, tk.END)
+        sel = self.code_list.curselection()
+        if not sel:
+            return
+        code = self.code_list.get(sel[0])
+        for tag in self.codes.get(code, []):
+            self.preview.insert(tk.END, f"{tag['key']} = {tag['value']}")
 
+    def focus_list(self, event):
         if self.code_list.size() == 0:
             return
-
         self.code_list.focus_set()
         self.code_list.selection_set(0)
 
-        self.update_preview()
-
-    # ------------------------------
-    # TAG PREVIEW
-    # ------------------------------
-
-    def update_preview(self, event=None):
-
-        self.preview.delete(0, tk.END)
-
-        code = None
-
-        sel = self.code_list.curselection()
-
-        if sel:
-            code = self.code_list.get(sel[0])
-
-        elif self.filtered_codes:
-            code = self.filtered_codes[0]
-
-        if not code:
-            return
-
-        for t in self.codes[code]:
-            self.preview.insert(tk.END, f"{t['key']} = {t['value']}")
-
-    # ------------------------------
-    # APPLY TAGS
-    # ------------------------------
-
+    # ---------------- Apply ----------------
     def apply_from_list(self, event=None):
-
         sel = self.code_list.curselection()
-
         if not sel:
             return
-
         code = self.code_list.get(sel[0])
         self.send(code)
 
     def apply_code(self, event=None):
-
         code = self.code_var.get().strip()
-
         if code in self.codes:
             self.send(code)
             return
-
         sel = self.code_list.curselection()
-
         if sel:
             self.send(self.code_list.get(sel[0]))
-            return
-
-        if self.filtered_codes:
-            self.send(self.filtered_codes[0])
 
     def send(self, code):
-
         threading.Thread(
             target=send_tags,
             args=(self.codes[code],),
             daemon=True
         ).start()
-
-        self.root.after(0, self._reset_input)
-
-    def _reset_input(self):
-
         self.code_var.set("")
-        # self.entry.focus_set()
 
-    # ------------------------------
-    # DATA
-    # ------------------------------
-
+    # ---------------- Reload / Editor ----------------
     def reload_codes(self):
-
         self.codes = load_codes()
         self.update_list()
 
-    # ------------------------------
-    # WINDOWS
-    # ------------------------------
-
     def open_editor(self):
+        if self.tag_editor and self.tag_editor.root.winfo_exists():
+            self.tag_editor.root.deiconify()
+            self.tag_editor.root.lift()
+        else:
+            self.tag_editor = TagEditorForm(
+                self.root,
+                self.codes,
+                self.reload_codes,
+                self.config
+            )
 
-        if self.tag_editor_window and self.tag_editor_window.winfo_exists():
-            self.tag_editor_window.lift()
-            self.tag_editor_window.focus_force()
-            return
+    # ---------------- Font ----------------
+    def select_font(self):
+        FontSelectorForm(
+            self.root,
+            self.config,
+            self.apply_font
+        )
 
-        self.tag_editor_window = TagEditorForm(self.root, self.codes)
+    def apply_font(self, *args):
+        font_conf = (self.config["font_family"], self.config["font_size"])
+        self.root.option_add("*Font", font_conf)
+
+        def apply(widget):
+            try:
+                widget.configure(font=font_conf)
+            except:
+                pass
+            for child in widget.winfo_children():
+                apply(child)
+
+        apply(self.root)

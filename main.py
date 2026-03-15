@@ -1,11 +1,14 @@
 import tkinter as tk
+
 from forms.main_form import MainForm
 
 
 def main():
 
     root = tk.Tk()
-    MainForm(root)
+
+    app = MainForm(root)
+
     root.mainloop()
 
 
