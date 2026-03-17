@@ -1,42 +1,78 @@
 import tkinter as tk
 import threading
-import keyboard
-
+import keyboard  # già presente
 from config_manager import load_config
 from codes_manager import load_codes
 from josm_interface import send_tags
-
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
 
-
 class MainForm:
+    instance = None  # single-instance
 
     def __init__(self, root):
+        # Single instance: se già esiste, porta in primo piano
+        if MainForm.instance is not None:
+            MainForm.instance.root.deiconify()
+            MainForm.instance.root.lift()
+            MainForm.instance.root.focus_force()
+            return
+
+        MainForm.instance = self
         self.root = root
         self.config = load_config()
         self.codes = load_codes()
+        self.filtered_codes = []
+        self.tag_editor = None
 
         root.title("JOSM Tagger")
         root.geometry("560x520")
         root.attributes("-topmost", True)
 
-        self.filtered_codes = []
-
-        self.tag_editor = None
-
         self.build_menu()
         self.build_ui()
         self.apply_font()
         self.update_list()
-        self.register_hotkey()
 
+        # Hotkey registrata in thread separato
+        self.register_hotkey()
         root.bind("<<Hotkey>>", self.focus_input_event)
 
-    # ---------------- Menu ----------------
+    # ================= Hotkey =================
+    def handle_hotkey(self):
+        """Riporta in primo piano in thread-safe manner"""
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+        self.root.attributes("-topmost", True)
+        self.root.after(50, lambda: self.root.attributes("-topmost", True))
+
+        # opzionale: focus input
+        self.entry.focus_set()
+        self.entry.select_range(0, tk.END)
+
+    def register_hotkey(self):
+        """Registra la hotkey globale senza bloccare Tkinter"""
+        def hotkey_thread():
+            keyboard.add_hotkey(
+                self.config.get("hotkey", "ctrl+num 0"),
+                self.hotkey_trigger
+            )
+            keyboard.wait()  # mantiene il listener attivo
+
+        threading.Thread(target=hotkey_thread, daemon=True).start()
+
+    def hotkey_trigger(self):
+        """Genera un evento thread-safe su Tkinter"""
+        self.root.event_generate("<<Hotkey>>", when="tail")
+
+    def focus_input_event(self, event):
+        """Callback legata all'evento generato dalla hotkey"""
+        self.handle_hotkey()
+
+    # ================= Menu =================
     def build_menu(self):
         menubar = tk.Menu(self.root)
-
         file_menu = tk.Menu(menubar, tearoff=0)
         file_menu.add_command(label="Reload codes", command=self.reload_codes)
         file_menu.add_separator()
@@ -54,7 +90,7 @@ class MainForm:
 
         self.root.config(menu=menubar)
 
-    # ---------------- UI ----------------
+    # ================= UI =================
     def build_ui(self):
         top = tk.Frame(self.root)
         top.pack(fill="x", padx=6, pady=6)
@@ -81,7 +117,6 @@ class MainForm:
 
         scrollbar = tk.Scrollbar(frame_list)
         scrollbar.pack(side="right", fill="y")
-
         self.code_list.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.code_list.yview)
 
@@ -113,7 +148,7 @@ class MainForm:
         self.preview.config(yscrollcommand=scroll_preview.set)
         scroll_preview.config(command=self.preview.yview)
 
-    # ---------------- Contestuale ----------------
+    # ================= Contestuale =================
     def show_context_menu(self, event):
         index = self.code_list.nearest(event.y)
         if index < 0:
@@ -148,24 +183,7 @@ class MainForm:
                 preload_code=code
             )
 
-    # ---------------- Hotkey ----------------
-    def register_hotkey(self):
-        keyboard.add_hotkey(
-            self.config.get("hotkey", "ctrl+num 0"),
-            self.hotkey_trigger
-        )
-
-    def hotkey_trigger(self):
-        self.root.event_generate("<<Hotkey>>", when="tail")
-
-    def focus_input_event(self, event):
-        self.root.deiconify()
-        self.root.lift()
-        self.root.focus_force()
-        self.entry.focus_set()
-        self.entry.select_range(0, tk.END)
-
-    # ---------------- Lista e Preview ----------------
+    # ================= Lista e Preview =================
     def update_list(self):
         self.code_list.delete(0, tk.END)
         self.filtered_codes = sorted(self.codes)
@@ -197,7 +215,7 @@ class MainForm:
         self.code_list.focus_set()
         self.code_list.selection_set(0)
 
-    # ---------------- Apply ----------------
+    # ================= Apply =================
     def apply_from_list(self, event=None):
         sel = self.code_list.curselection()
         if not sel:
@@ -222,7 +240,7 @@ class MainForm:
         ).start()
         self.code_var.set("")
 
-    # ---------------- Reload / Editor ----------------
+    # ================= Reload / Editor =================
     def reload_codes(self):
         self.codes = load_codes()
         self.update_list()
@@ -239,7 +257,7 @@ class MainForm:
                 self.config
             )
 
-    # ---------------- Font ----------------
+    # ================= Font =================
     def select_font(self):
         FontSelectorForm(
             self.root,

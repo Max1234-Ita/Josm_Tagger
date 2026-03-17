@@ -1,13 +1,18 @@
+from forms.main_form import MainForm
+from hotkeys import start_hotkeys
 import tkinter as tk
 
-from forms.main_form import MainForm
+
+def on_hotkey(app):
+    # rientra nel thread Tkinter
+    app.root.after(0, app.handle_hotkey)
 
 
 def main():
+    root = tk.Tk()              # crea la finestra Tk principale
+    app = MainForm(root)        # passa root al costruttore
 
-    root = tk.Tk()
-
-    app = MainForm(root)
+    start_hotkeys(lambda: on_hotkey(app))
 
     root.mainloop()
 
