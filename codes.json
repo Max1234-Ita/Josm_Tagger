@@ -306,5 +306,15 @@
             "key": "water",
             "value": "pond"
         }
+    ],
+    "nn": [
+        {
+            "key": "addr:street",
+            "value": "......"
+        },
+        {
+            "key": "addr:housenumber",
+            "value": "......"
+        }
     ]
 }
