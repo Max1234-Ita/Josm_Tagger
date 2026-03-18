@@ -316,5 +316,17 @@
             "key": "addr:housenumber",
             "value": "......"
         }
+    ],
+    "lao": [
+        {
+            "key": "landuse",
+            "value": "orchard"
+        }
+    ],
+    "pwml": [
+        {
+            "key": "power",
+            "value": "minor_line"
+        }
     ]
 }
