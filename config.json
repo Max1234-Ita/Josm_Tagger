@@ -1,7 +1,7 @@
 {
   "hotkey": "ctrl+num 0",
   "font_family": "Droid Sans Mono",
-  "font_size": 11,
+  "font_size": 9,
   "ui_scale": 1.0,
   "main_geometry": "560x520+2667+115",
   "geometry_main": "560x520+746+197",

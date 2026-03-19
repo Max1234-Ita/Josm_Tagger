@@ -328,5 +328,19 @@
             "key": "power",
             "value": "minor_line"
         }
+    ],
+    "recy": [
+        {
+            "key": "amenity",
+            "value": "recycling"
+        },
+        {
+            "key": "recycling_type",
+            "value": "container"
+        },
+        {
+            "key": "recycling:waste",
+            "value": "yes"
+        }
     ]
 }
