@@ -16,10 +16,30 @@ class FontSelectorForm:
 
         FontSelectorForm._instance = self
 
+        import os
+        import sys
+
         self.root = tk.Toplevel(root)
         self.root.title("Font Selector")
         self.root.attributes("-topmost", True)
         self.root.minsize(420, 340)
+
+        # ---------------- ICONA ----------------
+        try:
+            # percorso base = directory di main.py
+            base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+            icon_path_win = os.path.join(base_path, "resources", "josm_tagger.ico")
+            icon_path_linux = os.path.join(base_path, "resources", "josm_tagger.png")
+
+            if os.name == "nt" and os.path.exists(icon_path_win):
+                self.root.iconbitmap(icon_path_win)
+            elif os.path.exists(icon_path_linux):
+                icon_img = tk.PhotoImage(file=icon_path_linux)
+                self.root.iconphoto(True, icon_img)
+                self._icon_img = icon_img  # evita GC
+        except:
+            pass
+        # --------------------------------------
 
         self.config = config
         self.apply_callback = apply_callback
@@ -30,8 +50,8 @@ class FontSelectorForm:
         self.build_ui()
         self.load_fonts()
 
-        self.font_var.trace_add("write", lambda *args: self.on_font_entry_changed())
-        self.size_var.trace_add("write", lambda *args: self.update_preview())
+        self.font_var.trace_add("write", self._on_font_var_changed)
+        self.size_var.trace_add("write", self._on_size_var_changed)
 
         self.update_preview()
 
@@ -121,6 +141,12 @@ class FontSelectorForm:
             self.font_list.yview_moveto(start / total)
 
     # --------------------------------------------------
+
+    def _on_font_var_changed(self, name, index, mode):
+        self.on_font_entry_changed()
+
+    def _on_size_var_changed(self, name, index, mode):
+        self.update_preview()
 
     def on_font_entry_changed(self):
 

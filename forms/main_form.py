@@ -1,3 +1,6 @@
+
+import os
+import sys
 import tkinter as tk
 import threading
 import keyboard
@@ -9,6 +12,10 @@ from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
 
 
+def resource_path(relative_path):
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base_path, relative_path)
+
 class MainForm:
 
     def __init__(self, root):
@@ -18,8 +25,23 @@ class MainForm:
         self.codes = load_codes()
 
         root.title("JOSM Tagger")
-        root.geometry("560x520")
         root.attributes("-topmost", True)
+
+        # --- ICONA APP (compatibile PyInstaller) ---
+        try:
+            icon_path = resource_path("resources/josm_tagger.ico")
+            root.iconbitmap(icon_path)
+        except:
+            pass
+
+        # --- MIN SIZE FORM ---
+        self.root.minsize(256, 320)
+
+        # --- GEOMETRIA ---
+        self.apply_geometry()
+
+        # intercetta chiusura finestra
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.filtered_codes = []
 
@@ -29,6 +51,55 @@ class MainForm:
 
         self.apply_font()
         self.update_list()
+
+    def apply_geometry(self):
+
+        geom = self.config.get("geometry", {}).get("main_form")
+
+        if geom:
+            try:
+                x = geom.get("x", 100)
+                y = geom.get("y", 100)
+                w = geom.get("w", 560)
+                h = geom.get("h", 520)
+
+                self.root.geometry(f"{w}x{h}+{x}+{y}")
+                return
+            except:
+                pass
+
+        # fallback default
+        self.root.geometry("560x520")
+
+    def save_geometry(self):
+
+        try:
+            self.root.update_idletasks()
+
+            geom_str = self.root.geometry()
+            size, pos = geom_str.split("+", 1)
+            w, h = size.split("x")
+            x, y = pos.split("+")
+
+            if "geometry" not in self.config:
+                self.config["geometry"] = {}
+
+            self.config["geometry"]["main_form"] = {
+                "x": int(x),
+                "y": int(y),
+                "w": int(w),
+                "h": int(h)
+            }
+
+            save_config(self.config)
+
+        except:
+            pass
+
+    def on_close(self):
+
+        self.save_geometry()
+        self.root.destroy()
 
     # ---------------- MENU ----------------
     def build_menu(self):
@@ -68,15 +139,20 @@ class MainForm:
 
         self.entry.bind("<Return>", self.apply_code)
         self.entry.bind("<Down>", self.focus_list)
+        self.entry.bind("<Escape>", self.clear_input)
 
         self.apply_button = tk.Button(top, text="Apply", command=self.apply_code)
         self.apply_button.pack(side="right")
 
-        # --- LISTA CODICI ---
-        list_frame = tk.Frame(self.root)
-        list_frame.pack(fill="both", expand=True, padx=6)
+        paned = tk.PanedWindow(self.root, orient=tk.VERTICAL, sashrelief=tk.RAISED)
+        paned.pack(fill="both", expand=True, padx=6, pady=6)
 
-        self.code_list = tk.Listbox(list_frame)
+        MIN_HEIGHT = 80
+
+        # --- LISTA CODICI ---
+        list_frame = tk.Frame(paned)
+
+        self.code_list = tk.Listbox(list_frame, height=4)
 
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side="right", fill="y")
@@ -89,16 +165,18 @@ class MainForm:
         self.code_list.bind("<Double-Button-1>", self.apply_from_list)
         self.code_list.bind("<Return>", self.apply_from_list)
 
+        # --- NUOVO: CLICK DESTRO ---
+        self.code_list.bind("<Button-3>", self.show_context_menu)
+
         # --- PREVIEW ---
-        preview_frame = tk.Frame(self.root)
-        preview_frame.pack(fill="both", expand=False, padx=6, pady=6)
+        preview_frame = tk.Frame(paned)
 
         tk.Label(preview_frame, text="Tag preview").pack(anchor="w")
 
         preview_inner = tk.Frame(preview_frame)
         preview_inner.pack(fill="both", expand=True)
 
-        self.preview = tk.Listbox(preview_inner, height=6)
+        self.preview = tk.Listbox(preview_inner, height=4)
 
         scrollbar_preview = tk.Scrollbar(preview_inner)
         scrollbar_preview.pack(side="right", fill="y")
@@ -106,6 +184,75 @@ class MainForm:
 
         self.preview.config(yscrollcommand=scrollbar_preview.set)
         scrollbar_preview.config(command=self.preview.yview)
+
+        paned.add(list_frame, minsize=MIN_HEIGHT)
+        paned.add(preview_frame, minsize=MIN_HEIGHT)
+
+        # --- MENU CONTESTUALE ---
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="Use", command=self.context_use)
+        self.context_menu.add_command(label="Edit", command=self.context_edit)
+        self.context_menu.add_separator()
+        self.context_menu.add_command(label="Delete", command=self.context_delete)
+
+    # ---------- MENU CONTESTUALE ----------
+    def show_context_menu(self, event):
+
+        index = self.code_list.nearest(event.y)
+
+        if index < 0:
+            return
+
+        self.code_list.selection_clear(0, tk.END)
+        self.code_list.selection_set(index)
+
+        self.update_preview()
+
+        try:
+            self.context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.context_menu.grab_release()
+
+    def context_use(self):
+        self.apply_from_list()
+
+    def context_edit(self):
+
+        sel = self.code_list.curselection()
+        if not sel:
+            return
+
+        code = self.code_list.get(sel[0])
+
+        # apertura editor con selezione
+        TagEditorForm(self.root, self.codes, selected_code=code)
+
+    def context_delete(self):
+
+        import tkinter.messagebox as messagebox
+
+        sel = self.code_list.curselection()
+        if not sel:
+            return
+
+        code = self.code_list.get(sel[0])
+
+        confirm = messagebox.askyesno(
+            "Delete",
+            f"Delete code '{code}'?"
+        )
+
+        if not confirm:
+            return
+
+        if code in self.codes:
+            del self.codes[code]
+
+            from codes_manager import save_codes
+            save_codes(self.codes)
+
+            self.update_list()
+            self.preview.delete(0, tk.END)
 
     # ---------------- FONT ----------------
     def apply_font(self):
@@ -259,6 +406,9 @@ class MainForm:
     def _reset_input(self):
         self.code_var.set("")
         self.preview.delete(0, tk.END)
+
+    def clear_input(self, event=None):
+        self._reset_input()
 
     def send(self, code):
 

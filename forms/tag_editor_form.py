@@ -9,7 +9,6 @@ class TagEditorForm:
     _instance = None
 
     def __init__(self, root, codes, on_save_callback=None, config=None, preload_code=None):
-
         if TagEditorForm._instance and TagEditorForm._instance.root.winfo_exists():
             inst = TagEditorForm._instance
             inst.root.deiconify()
@@ -24,6 +23,24 @@ class TagEditorForm:
         self.root.title("Tag Editor")
         self.root.attributes("-topmost", True)
         self.root.minsize(450, 300)
+
+        # ---------------- Icon ----------------
+        import os, sys
+
+        # risaliamo alla root del progetto (una cartella sopra /forms)
+        base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+        ico_path = os.path.join(base_dir, "resources", "josm_tagger.ico")
+        png_path = os.path.join(base_dir, "resources", "josm_tagger.png")
+
+        try:
+            if sys.platform.startswith("win") and os.path.exists(ico_path):
+                self.root.iconbitmap(ico_path)
+            elif os.path.exists(png_path):
+                self._icon_img = tk.PhotoImage(file=png_path)
+                self.root.iconphoto(True, self._icon_img)
+        except Exception as e:
+            print("Failed to set window icon:", e)
 
         self.codes = codes
         self.on_save_callback = on_save_callback

@@ -35,12 +35,6 @@
             "value": "kerb"
         }
     ],
-    "b": [
-        {
-            "key": "building",
-            "value": "yes"
-        }
-    ],
     "eny": [
         {
             "key": "entrance",
@@ -211,10 +205,6 @@
         {
             "key": "tunnel",
             "value": "building_passage"
-        },
-        {
-            "key": "layer",
-            "value": "-1"
         }
     ],
     "tuc": [
@@ -341,6 +331,18 @@
         {
             "key": "recycling:waste",
             "value": "yes"
+        }
+    ],
+    "b": [
+        {
+            "key": "building",
+            "value": "yes"
+        }
+    ],
+    "brw": [
+        {
+            "key": "barrier",
+            "value": "retaining_wall"
         }
     ]
 }
