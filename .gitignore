@@ -1,4 +1,10 @@
 josm_code_sender.log
 *.log
+<<<<<<< Updated upstream
 .idea/inspectionProfiles/profiles_settings.xml
 /.idea/inspectionProfiles
+=======
+/.idea
+/.idea
+>>>>>>> Stashed changes
+/.idea
