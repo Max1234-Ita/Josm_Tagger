@@ -27,6 +27,13 @@ class MainForm:
         root.title("JOSM Tagger")
         root.attributes("-topmost", True)
 
+        # --- THEME ---
+        theme = self.config.get("theme", {})
+        self.bg_color = theme.get("bg", "#2b2b2b")
+        self.fg_color = theme.get("fg", "#ffffff")
+
+        self.root.configure(bg=self.bg_color)
+
         # --- ICONA APP (compatibile PyInstaller) ---
         try:
             icon_path = resource_path("resources/josm_tagger.ico")
@@ -40,7 +47,6 @@ class MainForm:
         # --- GEOMETRIA ---
         self.apply_geometry()
 
-        # intercetta chiusura finestra
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.filtered_codes = []
@@ -224,8 +230,12 @@ class MainForm:
 
         code = self.code_list.get(sel[0])
 
-        # apertura editor con selezione
-        TagEditorForm(self.root, self.codes, selected_code=code)
+        # apertura editor con selezione corretta
+        TagEditorForm(
+            self.root,
+            self.codes,
+            preload_code=code
+        )
 
     def context_delete(self):
 
