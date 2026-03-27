@@ -344,5 +344,24 @@
             "key": "barrier",
             "value": "retaining_wall"
         }
+    ],
+    "leisw": [],
+    "tg": [
+        {
+            "key": "natural",
+            "value": "tree_group"
+        }
+    ],
+    "wap": [
+        {
+            "key": "water",
+            "value": "pond"
+        }
+    ],
+    "wab": [
+        {
+            "key": "water",
+            "value": "basin"
+        }
     ]
 }
