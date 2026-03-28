@@ -46,7 +46,7 @@ class BaseForm(tk.Toplevel):
             except:
                 pass
 
-        # fallback: apri vicino al mainform
+        # fallback: open near the mainform
         self._place_near_parent()
 
     # --------------------------------

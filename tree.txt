@@ -1,0 +1,37 @@
+Elenco del percorso delle cartelle per il volume DATI-4TB
+Numero di serie del volume: E00A-2685
+\:.
+|   .gitattributes
+|   .gitignore
+|   codes.json
+|   codes_manager.py
+|   config.json
+|   config_manager.py
+|   hotkeys.py
+|   josm_interface.py
+|   josm_keyboard_sender.log
+|   jt-main.py
+|   main.py
+|   requirements.txt
+|   structure.txt
+|   tree.txt
+|   
++---.idea
+|           
++---.venv
+|           
++---forms
+|       base_form.py
+|       font_selector_form.py
+|       main_form.py
+|       tag_editor_form.py
+|       __init__.py
+|       
+|           
++---resources
+        JOSM Tagger.svg
+        josm_tagger.ico
+        josm_tagger.png
+        josm_tagger_white.ico
+       
+        

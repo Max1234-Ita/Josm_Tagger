@@ -27,7 +27,7 @@ class TagEditorForm:
         # ---------------- Icon ----------------
         import os, sys
 
-        # risaliamo alla root del progetto (una cartella sopra /forms)
+        # go up to project root (one folder above /forms)
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
         ico_path = os.path.join(base_dir, "resources", "josm_tagger.ico")
@@ -150,7 +150,7 @@ class TagEditorForm:
 
         self.entry_key.focus_set()
 
-        # ✅ NOTIFICA AGGIUNTA
+        # ✅ ADDITION NOTIFICATION
         messagebox.showinfo(
             "New Code",
             f"Code '{code}' created",

@@ -29,7 +29,7 @@ def save_geometry(key, window):
     cfg = load_config()
 
     geom = window.geometry()
-    # formato: "WxH+X+Y"
+    # format: "WxH+X+Y"
     size, pos = geom.split("+", 1)
     w, h = map(int, size.split("x"))
     x, y = map(int, pos.split("+"))
@@ -63,8 +63,8 @@ def load_geometry(key):
 
 def _get_monitors():
     """
-    Restituisce lista monitor.
-    Prova screeninfo, fallback su monitor principale.
+    Returns list of monitors.
+    Try screeninfo, fallback to primary monitor.
     """
     try:
         from screeninfo import get_monitors
@@ -87,7 +87,7 @@ def _is_visible_on_any_monitor(x, y, w, h, root):
                 return True
         return False
 
-    # fallback: solo monitor principale
+    # fallback: only primary monitor
     sw = root.winfo_screenwidth()
     sh = root.winfo_screenheight()
 
@@ -117,10 +117,10 @@ def _adjust_if_offscreen(root, x, y, w, h):
 
 def apply_geometry(window, key, default_size=(800, 600)):
     """
-    Applica geometria salvata:
-    - se esiste → usa quella
-    - se fuori schermo → la corregge
-    - se non esiste → centra con default_size
+    Apply saved geometry:
+    - if exists → use it
+    - if off screen → correct it
+    - if not exists → center with default_size
     """
 
     data = load_geometry(key)
@@ -137,7 +137,7 @@ def apply_geometry(window, key, default_size=(800, 600)):
 
 def bind_auto_save_geometry(window, key):
     """
-    Salva automaticamente la geometria alla chiusura.
+    Automatically save geometry on close.
     """
 
     def _on_close():

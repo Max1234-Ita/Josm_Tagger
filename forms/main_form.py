@@ -1,4 +1,3 @@
-
 import os
 import sys
 import tkinter as tk
@@ -34,17 +33,17 @@ class MainForm:
 
         self.root.configure(bg=self.bg_color)
 
-        # --- ICONA APP (compatibile PyInstaller) ---
+        # --- APP ICON (PyInstaller compatible) ---
         try:
             icon_path = resource_path("resources/josm_tagger.ico")
             root.iconbitmap(icon_path)
         except:
             pass
 
-        # --- MIN SIZE FORM ---
+        # --- MIN FORM SIZE ---
         self.root.minsize(256, 320)
 
-        # --- GEOMETRIA ---
+        # --- GEOMETRY ---
         self.apply_geometry()
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
@@ -74,7 +73,7 @@ class MainForm:
             except:
                 pass
 
-        # fallback default
+        # default fallback
         self.root.geometry("560x520")
 
     def save_geometry(self):
@@ -123,9 +122,14 @@ class MainForm:
         view_menu = tk.Menu(self.menubar, tearoff=0)
         view_menu.add_command(label="Font", command=self.select_font)
 
+        about_menu = tk.Menu(self.menubar, tearoff=0 )
+        about_menu.add_command(label='About', command=self.show_about)
+
         self.menubar.add_cascade(label="File", menu=file_menu)
         self.menubar.add_cascade(label="Edit", menu=edit_menu)
         self.menubar.add_cascade(label="View", menu=view_menu)
+        self.menubar.add_cascade(label="   ?", menu=about_menu)
+        # self.menubar.add_cascade(label="    ?", menu=)
 
         self.root.config(menu=self.menubar)
 
@@ -155,7 +159,7 @@ class MainForm:
 
         MIN_HEIGHT = 80
 
-        # --- LISTA CODICI ---
+        # --- CODES LIST ---
         list_frame = tk.Frame(paned)
 
         self.code_list = tk.Listbox(list_frame, height=4)
@@ -171,7 +175,7 @@ class MainForm:
         self.code_list.bind("<Double-Button-1>", self.apply_from_list)
         self.code_list.bind("<Return>", self.apply_from_list)
 
-        # --- NUOVO: CLICK DESTRO ---
+        # --- NEW: RIGHT CLICK ---
         self.code_list.bind("<Button-3>", self.show_context_menu)
 
         # --- PREVIEW ---
@@ -194,14 +198,14 @@ class MainForm:
         paned.add(list_frame, minsize=MIN_HEIGHT)
         paned.add(preview_frame, minsize=MIN_HEIGHT)
 
-        # --- MENU CONTESTUALE ---
+        # --- CONTEXT MENU ---
         self.context_menu = tk.Menu(self.root, tearoff=0)
         self.context_menu.add_command(label="Use", command=self.context_use)
         self.context_menu.add_command(label="Edit", command=self.context_edit)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Delete", command=self.context_delete)
 
-    # ---------- MENU CONTESTUALE ----------
+    # ---------- CONTEXT MENU ----------
     def show_context_menu(self, event):
 
         index = self.code_list.nearest(event.y)
@@ -219,6 +223,10 @@ class MainForm:
         finally:
             self.context_menu.grab_release()
 
+    def show_about(self):
+        from forms.about_form import AboutForm
+        AboutForm(self.root)
+
     def context_use(self):
         self.apply_from_list()
 
@@ -230,7 +238,7 @@ class MainForm:
 
         code = self.code_list.get(sel[0])
 
-        # apertura editor con selezione corretta
+        # open editor with correct selection
         TagEditorForm(
             self.root,
             self.codes,
@@ -327,7 +335,7 @@ class MainForm:
         except:
             pass
 
-    # ---------------- LOGICA CODICI ----------------
+    # ---------------- CODES LOGIC ----------------
     def update_list(self):
 
         self.code_list.delete(0, tk.END)
@@ -428,7 +436,7 @@ class MainForm:
             daemon=True
         ).start()
 
-    # ---------------- ALTRO ----------------
+    # ---------------- OTHER ----------------
     def reload_codes(self):
         self.codes = load_codes()
         self.update_list()

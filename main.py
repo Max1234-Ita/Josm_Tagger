@@ -5,17 +5,17 @@ import tkinter as tk
 appname = 'JOSM Tagger'
 appversion = '0.1.0'
 author = 'By M. Mula, 2026'
-appinfo = f'{appname} v.{appversion} - {author}'  # testo completo da usare nell'About
+appinfo = f'{appname} v.{appversion} - {author}'  # full text to use in About
 
-# --- Funzioni ---
+# --- Functions ---
 def on_hotkey(app):
-    # rientra nel thread Tkinter
+    # re-enter Tkinter thread
     app.root.after(0, app.handle_hotkey)
 
 
 def main():
-    root = tk.Tk()              # crea la finestra Tk principale
-    app = MainForm(root)        # passa root al costruttore
+    root = tk.Tk()              # create the main Tk window
+    app = MainForm(root)        # pass root to the constructor
 
     start_hotkeys(lambda: on_hotkey(app))
 

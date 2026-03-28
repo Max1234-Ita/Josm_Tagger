@@ -24,9 +24,9 @@ class FontSelectorForm:
         self.root.attributes("-topmost", True)
         self.root.minsize(420, 340)
 
-        # ---------------- ICONA ----------------
+        # ---------------- ICON ----------------
         try:
-            # percorso base = directory di main.py
+            # base path = directory of main.py
             base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
             icon_path_win = os.path.join(base_path, "resources", "josm_tagger.ico")
             icon_path_linux = os.path.join(base_path, "resources", "josm_tagger.png")
@@ -36,7 +36,7 @@ class FontSelectorForm:
             elif os.path.exists(icon_path_linux):
                 icon_img = tk.PhotoImage(file=icon_path_linux)
                 self.root.iconphoto(True, icon_img)
-                self._icon_img = icon_img  # evita GC
+                self._icon_img = icon_img  # avoid GC
         except:
             pass
         # --------------------------------------
@@ -78,7 +78,7 @@ class FontSelectorForm:
         )
         self.size_spin.pack(anchor="w")
 
-        # ---------------- LISTA FONT ----------------
+        # ---------------- FONT LIST ----------------
 
         list_frame = tk.Frame(self.root)
         list_frame.pack(fill="both", expand=True, padx=8, pady=6)
@@ -120,7 +120,7 @@ class FontSelectorForm:
         for f in self.fonts:
             self.font_list.insert(tk.END, f)
 
-        # seleziona font iniziale
+        # select initial font
         current = self.font_var.get()
 
         if current in self.fonts:
