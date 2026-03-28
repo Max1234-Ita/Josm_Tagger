@@ -202,10 +202,5 @@ class FontSelectorForm:
         if self.apply_callback:
             self.apply_callback(self.config)
 
-        messagebox.showinfo(
-            "Font Applied",
-            "Font settings saved",
-            parent=self.root
-        )
 
         self.root.destroy()

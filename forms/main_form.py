@@ -225,7 +225,7 @@ class MainForm:
 
     def show_about(self):
         from forms.about_form import AboutForm
-        AboutForm(self.root)
+        AboutForm(self.root, self.config)
 
     def context_use(self):
         self.apply_from_list()

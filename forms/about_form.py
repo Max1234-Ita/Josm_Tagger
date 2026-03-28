@@ -18,7 +18,7 @@ def resource_path(relative_path):
 class AboutForm:
 
     _instance = None
-    MAX_SIZE = 512
+    MAX_SIZE = 1200
 
     def __init__(self, root, config=None):
         if AboutForm._instance is not None:
@@ -71,21 +71,10 @@ class AboutForm:
             main_frame,
             text=appinfo,
             justify="center",
-            wraplength=AboutForm.MAX_SIZE - 40
+            wraplength=AboutForm.MAX_SIZE - 40,
+            fg="#000000"
         )
-        info_label.pack()
-
-        # Bottom area with Close button
-        bottom_frame = tk.Frame(main_frame)
-        bottom_frame.pack(fill="x", expand=True, pady=(20, 0))
-
-        close_button = tk.Button(
-            bottom_frame,
-            text="Close",
-            width=8,
-            command=self._on_close
-        )
-        close_button.pack(side="right", padx=(0, 5), pady=(0, 5))
+        info_label.pack(anchor="center", pady=(10, 10))
 
         # Handle close
         self.window.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -93,6 +82,9 @@ class AboutForm:
         # Update layout and scale image proportionally
         self.window.update_idletasks()
         self._update_scaled_image()
+
+        # Set focus to the window
+        self.window.focus_force()
 
     def _get_scaled_image(self, image):
         if not image:
@@ -148,6 +140,11 @@ class AboutForm:
                 size_part = geom.split("+")[0]
                 w, h = map(int, size_part.split("x"))
 
+                # Apply UI scale
+                ui_scale = self.config.get("ui_scale", 1.0)
+                w = int(w * ui_scale)
+                h = int(h * ui_scale)
+
                 # Limit to MAX_SIZE
                 w = min(w, AboutForm.MAX_SIZE)
                 h = min(h, AboutForm.MAX_SIZE)
@@ -171,15 +168,15 @@ class AboutForm:
 
         # Available dimensions in the frame
         frame_w = self.window.winfo_width() - 40
-        frame_h = self.window.winfo_height() - 140  # space for text + button
+        max_image_h = 200  # fixed max height for the image
 
-        if frame_w <= 0 or frame_h <= 0:
+        if frame_w <= 0:
             return
 
         img_w = self.raw_image.width()
         img_h = self.raw_image.height()
 
-        scale = min(frame_w / img_w, frame_h / img_h, 1.0)
+        scale = min(frame_w / img_w, max_image_h / img_h, 1.0)
 
         new_w = max(1, int(img_w * scale))
         new_h = max(1, int(img_h * scale))
@@ -190,3 +187,4 @@ class AboutForm:
         self.image = self.raw_image.subsample(subsample_x, subsample_y)
 
         self.icon_label.configure(image=self.image)
+

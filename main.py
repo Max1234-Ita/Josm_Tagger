@@ -5,7 +5,7 @@ import tkinter as tk
 appname = 'JOSM Tagger'
 appversion = '0.1.0'
 author = 'By M. Mula, 2026'
-appinfo = f'{appname} v.{appversion} - {author}'  # full text to use in About
+appinfo = f'{appname} v.{appversion}\n- {author} -'  # full text to use in About
 
 # --- Functions ---
 def on_hotkey(app):
