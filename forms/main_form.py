@@ -1,6 +1,7 @@
 import os
 import sys
 import tkinter as tk
+import tkinter.ttk as ttk
 import threading
 import keyboard
 
@@ -49,6 +50,18 @@ class MainForm:
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
         self.filtered_codes = []
+
+        # Declare attributes
+        self._trace_id = None
+
+        # Declare instance attributes to avoid warnings
+        self.code_var = None
+        self.entry = None
+        self.apply_button = None
+        self.code_list = None
+        self.preview = None
+        self.context_menu = None
+        self.menubar = None
 
         self.build_menu()
         self.build_ui()
@@ -142,19 +155,20 @@ class MainForm:
         tk.Label(top, text="Code:").pack(side="left")
 
         self.code_var = tk.StringVar()
-        self.code_var.trace_add("write", self.filter_codes)
+        self._trace_id = self.code_var.trace_add("write", self.filter_codes)
 
-        self.entry = tk.Entry(top, textvariable=self.code_var)
+        # --- CHANGED: Entry to Combobox ---
+        self.entry = ttk.Combobox(top, textvariable=self.code_var, width=10)
         self.entry.pack(fill="x", expand=True, side="left", padx=4)
 
         self.entry.bind("<Return>", self.apply_code)
         self.entry.bind("<Down>", self.focus_list)
         self.entry.bind("<Escape>", self.clear_input)
 
-        self.apply_button = tk.Button(top, text="Apply", command=self.apply_code)
+        self.apply_button = tk.Button(top, text="Apply", command=self.apply_code, width=6)
         self.apply_button.pack(side="right")
 
-        paned = tk.PanedWindow(self.root, orient=tk.VERTICAL, sashrelief=tk.RAISED)
+        paned = tk.PanedWindow(self.root, orient="vertical", sashrelief="raised")
         paned.pack(fill="both", expand=True, padx=6, pady=6)
 
         MIN_HEIGHT = 80
@@ -345,6 +359,8 @@ class MainForm:
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
 
+        self.entry['values'] = self.filtered_codes
+
     def filter_codes(self, *args):
 
         text = self.code_var.get().lower()
@@ -352,11 +368,13 @@ class MainForm:
         self.code_list.delete(0, tk.END)
 
         self.filtered_codes = sorted(
-            [c for c in self.codes if text in c.lower()]
+            [c for c in self.codes if c.lower().startswith(text.lower())]
         )
 
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
+
+        self.entry['values'] = self.filtered_codes
 
         self.update_preview()
 

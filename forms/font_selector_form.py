@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import font, messagebox
+from tkinter import font
 from config_manager import save_config
 
 
@@ -46,6 +46,18 @@ class FontSelectorForm:
 
         self.font_var = tk.StringVar(value=self.config.get("font_family", "Segoe UI"))
         self.size_var = tk.IntVar(value=self.config.get("font_size", 10))
+
+        # Declare attributes
+        self.fonts = []
+        self._icon_img = None
+
+        # Declare UI attributes
+        self.font_var = None
+        self.size_var = None
+        self.entry = None
+        self.size_spin = None
+        self.font_list = None
+        self.preview_label = None
 
         self.build_ui()
         self.load_fonts()
@@ -190,7 +202,7 @@ class FontSelectorForm:
         except:
             pass
 
-    # --------------------------------------------------
+    # -------------------------------------------------
 
     def apply(self):
 

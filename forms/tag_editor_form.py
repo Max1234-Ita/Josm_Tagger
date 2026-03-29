@@ -1,6 +1,6 @@
 import tkinter as tk
+import tkinter.ttk as ttk
 from tkinter import simpledialog, messagebox
-from config_manager import save_config
 from codes_manager import save_codes
 
 
@@ -49,6 +49,26 @@ class TagEditorForm:
 
         self.current_code = None
 
+        # Declare attributes
+        self._trace_id = None
+        self._icon_img = None
+
+        # Declare UI attributes
+        self.code_var = None
+        self.key_var = None
+        self.value_var = None
+        self.entry_code = None
+        self.new_btn = None
+        self.rename_btn = None
+        self.tag_list = None
+        self.entry_key = None
+        self.entry_value = None
+        self.add_btn = None
+        self.update_btn = None
+        self.remove_btn = None
+        self.save_btn = None
+        self.cancel_btn = None
+
         self.build_ui()
         self.apply_font()
 
@@ -63,14 +83,18 @@ class TagEditorForm:
         tk.Label(top_frame, text="Code:").pack(side="left")
 
         self.code_var = tk.StringVar()
-        self.entry_code = tk.Entry(top_frame, textvariable=self.code_var)
+        self.entry_code = ttk.Combobox(top_frame, textvariable=self.code_var)
         self.entry_code.pack(side="left", fill="x", expand=True)
+
+        self._trace_id = self.code_var.trace_add("write", self.auto_load_code)
+
+        self.entry_code['values'] = sorted(self.codes.keys())
 
         self.new_btn = tk.Button(top_frame, text="New", command=self.new_code)
         self.new_btn.pack(side="right", padx=4)
 
-        self.load_btn = tk.Button(top_frame, text="Load", command=self.load_current_code)
-        self.load_btn.pack(side="right")
+        self.rename_btn = tk.Button(top_frame, text="Rename", command=self.rename_code)
+        self.rename_btn.pack(side="right")
 
         frame_list = tk.Frame(self.root)
         frame_list.pack(fill="both", expand=True, padx=6, pady=6)
@@ -121,6 +145,9 @@ class TagEditorForm:
         self.save_btn = tk.Button(btn_frame, text="Save", command=self.save_all)
         self.save_btn.pack(side="left", padx=4)
 
+        self.cancel_btn = tk.Button(btn_frame, text="Cancel", command=self.root.destroy)
+        self.cancel_btn.pack(side="left", padx=4)
+
     # ---------------- Code management ----------------
     def new_code(self):
         code = self.code_var.get().strip()
@@ -156,12 +183,6 @@ class TagEditorForm:
             f"Code '{code}' created",
             parent=self.root
         )
-
-    def load_current_code(self):
-        code = self.code_var.get().strip()
-        if not code:
-            return
-        self.load_code(code)
 
     def load_code(self, code):
         if code not in self.codes:
@@ -264,6 +285,55 @@ class TagEditorForm:
             parent=self.root
         )
 
+    def rename_code(self):
+        if not self.current_code:
+            messagebox.showwarning(
+                "No code",
+                "Load or create a code first",
+                parent=self.root
+            )
+            return
+
+        new_name = simpledialog.askstring(
+            "Rename Code",
+            "Enter new code name:",
+            initialvalue=self.current_code,
+            parent=self.root
+        )
+
+        if not new_name or new_name.strip() == "":
+            return
+
+        new_name = new_name.strip()
+
+        if new_name == self.current_code:
+            return
+
+        if new_name in self.codes:
+            messagebox.showwarning(
+                "Warning",
+                "Code name already exists",
+                parent=self.root
+            )
+            return
+
+        # Rename: move the tags to new name and delete old
+        self.codes[new_name] = self.codes.pop(self.current_code)
+        self.current_code = new_name
+        self.code_var.set(new_name)
+
+        # Save changes
+        save_codes(self.codes)
+
+        if self.on_save_callback:
+            self.on_save_callback()
+
+        messagebox.showinfo(
+            "Info",
+            f"Code renamed to '{new_name}'",
+            parent=self.root
+        )
+
     # ---------------- Font ----------------
     def apply_font(self):
         font_conf = (
@@ -282,3 +352,18 @@ class TagEditorForm:
                 apply(child)
 
         apply(self.root)
+
+    def auto_load_code(self, *args):
+        code = self.code_var.get().strip()
+        if not code:
+            self.entry_code['values'] = sorted(self.codes.keys())
+            return
+
+        # Filter values
+        filtered = sorted([c for c in self.codes if c.lower().startswith(code.lower())])
+        self.entry_code['values'] = filtered
+
+        # Load if exact
+        if code in self.codes:
+            self.load_code(code)
+

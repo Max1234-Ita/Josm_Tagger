@@ -47,12 +47,6 @@
             "value": "farmland"
         }
     ],
-    "farmy": [
-        {
-            "key": "landuse",
-            "value": "farmyard"
-        }
-    ],
     "hf": [
         {
             "key": "highway",
@@ -362,6 +356,12 @@
         {
             "key": "water",
             "value": "basin"
+        }
+    ],
+    "fyard": [
+        {
+            "key": "landuse",
+            "value": "farmyard"
         }
     ]
 }
