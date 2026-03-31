@@ -159,7 +159,7 @@ class MainForm:
 
         # --- CHANGED: Entry to Combobox ---
         self.entry = ttk.Combobox(top, textvariable=self.code_var, width=10)
-        self.entry.pack(fill="x", expand=True, side="left", padx=4)
+        self.entry.pack(fill="x", expand=True, side="left", padx=(4, 4))
 
         self.entry.bind("<Return>", self.apply_code)
         self.entry.bind("<Down>", self.focus_list)

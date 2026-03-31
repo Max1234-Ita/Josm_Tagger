@@ -52,8 +52,6 @@ class FontSelectorForm:
         self._icon_img = None
 
         # Declare UI attributes
-        self.font_var = None
-        self.size_var = None
         self.entry = None
         self.size_spin = None
         self.font_list = None
@@ -74,12 +72,14 @@ class FontSelectorForm:
         top = tk.Frame(self.root)
         top.pack(fill="x", padx=8, pady=6)
 
-        tk.Label(top, text="Font Family:").pack(anchor="w")
+        top.grid_columnconfigure(1, weight=1)
+
+        tk.Label(top, text="Font Family:").grid(row=0, column=0, sticky="w")
 
         self.entry = tk.Entry(top, textvariable=self.font_var)
-        self.entry.pack(fill="x")
+        self.entry.grid(row=0, column=1, sticky="we")
 
-        tk.Label(top, text="Font Size:").pack(anchor="w", pady=(6, 0))
+        tk.Label(top, text="Size:").grid(row=0, column=2, sticky="w", padx=(10, 0))
 
         self.size_spin = tk.Spinbox(
             top,
@@ -88,7 +88,7 @@ class FontSelectorForm:
             textvariable=self.size_var,
             width=6
         )
-        self.size_spin.pack(anchor="w")
+        self.size_spin.grid(row=0, column=3, sticky="w")
 
         # ---------------- FONT LIST ----------------
 
@@ -113,7 +113,7 @@ class FontSelectorForm:
             self.root,
             text="The quick brown fox jumps over the lazy dog"
         )
-        self.preview_label.pack(fill="x", padx=8, pady=(0, 8))
+        self.preview_label.pack(fill="x", padx=(12, 8), pady=(0, 8))
 
         # ---------------- BUTTONS ----------------
 
@@ -127,7 +127,14 @@ class FontSelectorForm:
 
     def load_fonts(self):
 
-        self.fonts = sorted(set(font.families()))
+        try:
+            self.fonts = sorted(set(font.families()))
+        except Exception as e:
+            print(f"Error loading fonts: {e}")
+            self.fonts = ["Arial", "Courier New", "Times New Roman", "Segoe UI"]
+
+        if not self.fonts:
+            self.fonts = ["Arial", "Courier New", "Times New Roman", "Segoe UI"]
 
         for f in self.fonts:
             self.font_list.insert(tk.END, f)
@@ -162,6 +169,8 @@ class FontSelectorForm:
 
     def on_font_entry_changed(self):
 
+        self.font_list.selection_clear(0, tk.END)
+
         typed = self.font_var.get().lower()
 
         if not typed:
@@ -172,7 +181,6 @@ class FontSelectorForm:
 
             if f.lower().startswith(typed):
 
-                self.font_list.selection_clear(0, tk.END)
                 self.font_list.selection_set(idx)
 
                 self.center_list_on(idx)
@@ -190,6 +198,7 @@ class FontSelectorForm:
         if sel:
             name = self.font_list.get(sel[0])
             self.font_var.set(name)
+            self.font_list.selection_clear(0, tk.END)
             self.update_preview()
 
     # --------------------------------------------------

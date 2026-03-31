@@ -60,6 +60,8 @@ class TagEditorForm:
         self.entry_code = None
         self.new_btn = None
         self.rename_btn = None
+        self.code_list = None
+        self.context_menu = None
         self.tag_list = None
         self.entry_key = None
         self.entry_value = None
@@ -93,44 +95,77 @@ class TagEditorForm:
         self.new_btn = tk.Button(top_frame, text="New", command=self.new_code)
         self.new_btn.pack(side="right", padx=4)
 
-        self.rename_btn = tk.Button(top_frame, text="Rename", command=self.rename_code)
-        self.rename_btn.pack(side="right")
+        # Removed rename_btn as it's now in context menu
 
-        frame_list = tk.Frame(self.root)
-        frame_list.pack(fill="both", expand=True, padx=6, pady=6)
+        # PanedWindow to split left and right
+        paned = tk.PanedWindow(self.root, orient="horizontal", sashrelief="raised")
+        paned.pack(fill="both", expand=True, padx=6, pady=6)
 
-        self.tag_list = tk.Listbox(frame_list)
+        # Left side: Code list
+        left_frame = tk.Frame(paned)
+
+        tk.Label(left_frame, text="Codes").pack(anchor="w", padx=4)
+
+        list_container = tk.Frame(left_frame)
+        list_container.pack(fill="both", expand=True)
+
+        self.code_list = tk.Listbox(list_container)
+        self.code_list.pack(side="left", fill="both", expand=True)
+
+        scrollbar_left = tk.Scrollbar(list_container, command=self.code_list.yview)
+        scrollbar_left.pack(side="right", fill="y")
+        self.code_list.config(yscrollcommand=scrollbar_left.set)
+
+        self.code_list.bind("<<ListboxSelect>>", self.on_code_select)
+        self.code_list.bind("<Button-3>", self.show_context_menu)
+
+        paned.add(left_frame, minsize=150)
+
+        # Right side: Existing controls
+        right_frame = tk.Frame(paned)
+
+        # Tag list
+        frame_list = tk.Frame(right_frame)
+        frame_list.pack(fill="both", expand=True)
+
+        tk.Label(frame_list, text="Tags").pack(anchor="w", padx=4)
+
+        tag_container = tk.Frame(frame_list)
+        tag_container.pack(fill="both", expand=True)
+
+        self.tag_list = tk.Listbox(tag_container)
         self.tag_list.pack(side="left", fill="both", expand=True)
 
-        scrollbar = tk.Scrollbar(frame_list)
+        scrollbar = tk.Scrollbar(tag_container, command=self.tag_list.yview)
         scrollbar.pack(side="right", fill="y")
 
         self.tag_list.config(yscrollcommand=scrollbar.set)
-        scrollbar.config(command=self.tag_list.yview)
 
         self.tag_list.bind("<<ListboxSelect>>", self.on_tag_select)
 
-        entry_frame = tk.Frame(self.root)
-        entry_frame.pack(fill="x", padx=6, pady=6)
+        # Entry frame
+        entry_frame = tk.Frame(right_frame)
+        entry_frame.pack(fill="x", padx=4, pady=6)
 
-        tk.Label(entry_frame, text="Key:").grid(row=0, column=0, sticky="w")
+        tk.Label(entry_frame, text="Key:").grid(row=0, column=0, sticky="w", padx=(0, 4))
 
         self.key_var = tk.StringVar()
         self.entry_key = tk.Entry(entry_frame, textvariable=self.key_var)
-        self.entry_key.grid(row=0, column=1, sticky="we", padx=4)
+        self.entry_key.grid(row=0, column=1, sticky="we", padx=(4, 4))
 
-        tk.Label(entry_frame, text="Value:").grid(row=0, column=2, sticky="w")
+        tk.Label(entry_frame, text="Value:").grid(row=0, column=2, sticky="w", padx=(4, 4))
 
         self.value_var = tk.StringVar()
         self.entry_value = tk.Entry(entry_frame, textvariable=self.value_var)
-        self.entry_value.grid(row=0, column=3, sticky="we", padx=4)
+        self.entry_value.grid(row=0, column=3, sticky="we", padx=(4, 0))
 
         self.entry_value.bind("<Return>", lambda e: self.add_tag())
 
         entry_frame.columnconfigure(1, weight=1)
         entry_frame.columnconfigure(3, weight=1)
 
-        btn_frame = tk.Frame(self.root)
+        # Button frame
+        btn_frame = tk.Frame(right_frame)
         btn_frame.pack(pady=6)
 
         self.add_btn = tk.Button(btn_frame, text="Add", command=self.add_tag)
@@ -147,6 +182,107 @@ class TagEditorForm:
 
         self.cancel_btn = tk.Button(btn_frame, text="Cancel", command=self.root.destroy)
         self.cancel_btn.pack(side="left", padx=4)
+
+        paned.add(right_frame, minsize=300)
+
+        # Context menu for code list
+        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu.add_command(label="Rename", command=self.context_rename)
+        self.context_menu.add_command(label="Delete", command=self.context_delete)
+
+        # Initialize code list
+        self.update_code_list()
+
+    # ---------------- Code list methods ----------------
+    def update_code_list(self, filtered=None):
+        self.code_list.delete(0, tk.END)
+        codes = filtered if filtered is not None else sorted(self.codes.keys())
+        for c in codes:
+            self.code_list.insert(tk.END, c)
+
+    def on_code_select(self, event=None):
+        sel = self.code_list.curselection()
+        if not sel:
+            return
+        code = self.code_list.get(sel[0])
+        # Temporarily remove trace to avoid recursion
+        self.code_var.trace_remove("write", self._trace_id)
+        self.code_var.set(code)
+        self._trace_id = self.code_var.trace_add("write", self.auto_load_code)
+        self.load_code(code)
+
+    def show_context_menu(self, event):
+        index = self.code_list.nearest(event.y)
+        if index < 0:
+            return
+        self.code_list.selection_clear(0, tk.END)
+        self.code_list.selection_set(index)
+        try:
+            self.context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.context_menu.grab_release()
+
+    def context_rename(self):
+        sel = self.code_list.curselection()
+        if not sel:
+            return
+        old_code = self.code_list.get(sel[0])
+        new_name = simpledialog.askstring(
+            "Rename Code",
+            "Enter new code name:",
+            initialvalue=old_code,
+            parent=self.root
+        )
+        if not new_name or new_name.strip() == "":
+            return
+        new_name = new_name.strip()
+        if new_name == old_code:
+            return
+        if new_name in self.codes:
+            messagebox.showwarning(
+                "Warning",
+                "Code name already exists",
+                parent=self.root
+            )
+            return
+        # Rename
+        self.codes[new_name] = self.codes.pop(old_code)
+        if self.current_code == old_code:
+            self.current_code = new_name
+            self.code_var.set(new_name)
+        save_codes(self.codes)
+        if self.on_save_callback:
+            self.on_save_callback()
+        self.update_code_list()
+        messagebox.showinfo(
+            "Info",
+            f"Code renamed to '{new_name}'",
+            parent=self.root
+        )
+
+    def context_delete(self):
+        sel = self.code_list.curselection()
+        if not sel:
+            return
+        code = self.code_list.get(sel[0])
+        confirm = messagebox.askyesno(
+            "Delete",
+            f"Delete code '{code}'?",
+            parent=self.root
+        )
+        if not confirm:
+            return
+        if code in self.codes:
+            del self.codes[code]
+            save_codes(self.codes)
+            if self.on_save_callback:
+                self.on_save_callback()
+            self.update_code_list()
+            if self.current_code == code:
+                self.current_code = None
+                self.tag_list.delete(0, tk.END)
+                self.key_var.set("")
+                self.value_var.set("")
 
     # ---------------- Code management ----------------
     def new_code(self):
@@ -183,6 +319,8 @@ class TagEditorForm:
             f"Code '{code}' created",
             parent=self.root
         )
+
+        self.update_code_list()
 
     def load_code(self, code):
         if code not in self.codes:
@@ -285,54 +423,7 @@ class TagEditorForm:
             parent=self.root
         )
 
-    def rename_code(self):
-        if not self.current_code:
-            messagebox.showwarning(
-                "No code",
-                "Load or create a code first",
-                parent=self.root
-            )
-            return
-
-        new_name = simpledialog.askstring(
-            "Rename Code",
-            "Enter new code name:",
-            initialvalue=self.current_code,
-            parent=self.root
-        )
-
-        if not new_name or new_name.strip() == "":
-            return
-
-        new_name = new_name.strip()
-
-        if new_name == self.current_code:
-            return
-
-        if new_name in self.codes:
-            messagebox.showwarning(
-                "Warning",
-                "Code name already exists",
-                parent=self.root
-            )
-            return
-
-        # Rename: move the tags to new name and delete old
-        self.codes[new_name] = self.codes.pop(self.current_code)
-        self.current_code = new_name
-        self.code_var.set(new_name)
-
-        # Save changes
-        save_codes(self.codes)
-
-        if self.on_save_callback:
-            self.on_save_callback()
-
-        messagebox.showinfo(
-            "Info",
-            f"Code renamed to '{new_name}'",
-            parent=self.root
-        )
+    # Removed rename_code method as it's now context_rename
 
     # ---------------- Font ----------------
     def apply_font(self):
@@ -357,13 +448,14 @@ class TagEditorForm:
         code = self.code_var.get().strip()
         if not code:
             self.entry_code['values'] = sorted(self.codes.keys())
+            self.update_code_list()
             return
 
         # Filter values
         filtered = sorted([c for c in self.codes if c.lower().startswith(code.lower())])
         self.entry_code['values'] = filtered
+        self.update_code_list(filtered)
 
         # Load if exact
         if code in self.codes:
             self.load_code(code)
-
