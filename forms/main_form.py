@@ -16,6 +16,34 @@ def resource_path(relative_path):
     base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
     return os.path.join(base_path, relative_path)
 
+class Tooltip:
+    """Simple tooltip widget for Tkinter"""
+    def __init__(self, widget, text):
+        self.widget = widget
+        self.text = text
+        self.tipwindow = None
+        self.id = None
+        self.x = self.y = 0
+        widget.bind("<Enter>", self.showtip)
+        widget.bind("<Leave>", self.hidetip)
+
+    def showtip(self, event=None):
+        if self.tipwindow or not self.text:
+            return
+        x = self.widget.winfo_rootx() + 10
+        y = self.widget.winfo_rooty() + self.widget.winfo_height() + 5
+        self.tipwindow = tw = tk.Toplevel(self.widget)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        label = tk.Label(tw, text=self.text, background="#ffffe0", relief=tk.SOLID, borderwidth=1, font=("Arial", 8))
+        label.pack(ipadx=1)
+
+    def hidetip(self, event=None):
+        tw = self.tipwindow
+        self.tipwindow = None
+        if tw:
+            tw.destroy()
+
 class MainForm:
 
     def __init__(self, root):
@@ -42,7 +70,8 @@ class MainForm:
             pass
 
         # --- MIN FORM SIZE ---
-        self.root.minsize(256, 320)
+        # Allow vertical shrinking down to accommodate the code list minsize (80) + top frame + padding
+        self.root.minsize(256, 160)
 
         # --- GEOMETRY ---
         self.apply_geometry()
@@ -62,6 +91,12 @@ class MainForm:
         self.preview = None
         self.context_menu = None
         self.menubar = None
+        self.preview_frame = None
+        self.paned = None
+        self.toggle_button = None
+        self.expand_image = None
+        self.collapse_image = None
+        self.preview_expanded = self.config.get("preview_expanded", True)
 
         self.build_menu()
         self.build_ui()
@@ -109,10 +144,51 @@ class MainForm:
                 "h": int(h)
             }
 
+            # Save preview state
+            self.config["preview_expanded"] = self.preview_expanded
+
             save_config(self.config)
 
         except:
             pass
+
+    def _load_icons(self):
+        """Use Unicode symbols for toggle button (Pillow doesn't support SVG)"""
+        # Using Unicode arrows instead of SVG files
+        self.expand_symbol = "▼"  # Down arrow for expand
+        self.collapse_symbol = "▲"  # Up arrow for collapse
+        self.expand_image = None
+        self.collapse_image = None
+
+    def toggle_preview(self):
+        """Toggle preview visibility"""
+        self.preview_expanded = not self.preview_expanded
+
+        # Change minsize instead of removing/adding to keep button visible
+        minsize = 80 if self.preview_expanded else 0
+        self.paned.paneconfigure(self.preview_frame, minsize=minsize)
+
+        self.toggle_button.config(text=self.collapse_symbol if self.preview_expanded else self.expand_symbol)
+
+        # Adjust window height
+        self.root.update_idletasks()
+        geom_str = self.root.geometry()
+        size, pos = geom_str.split("+", 1)
+        w, h = size.split("x")
+        x, y = pos.split("+")
+
+        current_height = int(h)
+        expanded_height = self.config.get("preview_expanded_height", 240)
+
+        if self.preview_expanded:
+            # Expand: increase height
+            new_height = current_height + expanded_height
+            self.root.geometry(f"{w}x{new_height}+{x}+{y}")
+        else:
+            # Collapse: set to minsize
+            self.root.geometry(f"{w}x160+{x}+{y}")
+
+        self.save_geometry()
 
     def on_close(self):
 
@@ -168,13 +244,13 @@ class MainForm:
         self.apply_button = tk.Button(top, text="Apply", command=self.apply_code, width=6)
         self.apply_button.pack(side="right")
 
-        paned = tk.PanedWindow(self.root, orient="vertical", sashrelief="raised")
-        paned.pack(fill="both", expand=True, padx=6, pady=6)
+        self.paned = tk.PanedWindow(self.root, orient="vertical", sashrelief="raised")
+        self.paned.pack(fill="both", expand=True, padx=6, pady=6)
 
         MIN_HEIGHT = 80
 
         # --- CODES LIST ---
-        list_frame = tk.Frame(paned)
+        list_frame = tk.Frame(self.paned)
 
         self.code_list = tk.Listbox(list_frame, height=4)
 
@@ -193,11 +269,36 @@ class MainForm:
         self.code_list.bind("<Button-3>", self.show_context_menu)
 
         # --- PREVIEW ---
-        preview_frame = tk.Frame(paned)
+        self.preview_frame = tk.Frame(self.paned)
 
-        tk.Label(preview_frame, text="Tag preview").pack(anchor="w")
+        preview_header = tk.Frame(self.preview_frame)
+        preview_header.pack(fill="x", anchor="w")
 
-        preview_inner = tk.Frame(preview_frame)
+        tk.Label(preview_header, text="Tag preview").pack(side="left")
+
+        # Load SVG icons
+        self._load_icons()
+
+        symbol = self.collapse_symbol if self.preview_expanded else self.expand_symbol
+
+        self.toggle_button = tk.Button(
+            preview_header,
+            text=symbol,
+            command=self.toggle_preview,
+            width=2,
+            height=1,
+            bg=self.bg_color,
+            fg="#303030",
+            activebackground=self.bg_color,
+            activeforeground="#303030",
+            bd=0
+        )
+        self.toggle_button.pack(side="right", padx=(4, 0))
+
+        # Add tooltip
+        Tooltip(self.toggle_button, "Expand/collapse tag preview")
+
+        preview_inner = tk.Frame(self.preview_frame)
         preview_inner.pack(fill="both", expand=True)
 
         self.preview = tk.Listbox(preview_inner, height=4)
@@ -209,8 +310,11 @@ class MainForm:
         self.preview.config(yscrollcommand=scrollbar_preview.set)
         scrollbar_preview.config(command=self.preview.yview)
 
-        paned.add(list_frame, minsize=MIN_HEIGHT)
-        paned.add(preview_frame, minsize=MIN_HEIGHT)
+        self.paned.add(list_frame, minsize=MIN_HEIGHT)
+
+        # Always add preview frame, but with minsize 0 if not expanded
+        minsize_preview = MIN_HEIGHT if self.preview_expanded else 0
+        self.paned.add(self.preview_frame, minsize=minsize_preview)
 
         # --- CONTEXT MENU ---
         self.context_menu = tk.Menu(self.root, tearoff=0)
