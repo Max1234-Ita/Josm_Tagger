@@ -182,6 +182,7 @@ class MainForm:
 
     # ---------------- UI ----------------
     def build_ui(self):
+        # --- TOP PANEL ---
         top = tk.Frame(self.root)
         top.pack(fill="x", padx=6, pady=6)
 
@@ -199,9 +200,11 @@ class MainForm:
         self.apply_button = tk.Button(top, text="Apply", command=self.apply_code, width=6)
         self.apply_button.pack(side="right")
 
+        # --- PANED WINDOW (SOLO 2 PANNELLI) ---
         self.paned = tk.PanedWindow(self.root, orient="vertical", sashrelief="raised")
         self.paned.pack(fill="both", expand=True, padx=6, pady=6)
 
+        # --- LISTA CODICI (PANNELLO 1 - RIDIMENSIONABILE) ---
         MIN_HEIGHT = 80
         list_frame = tk.Frame(self.paned)
         self.code_list = tk.Listbox(list_frame, height=4)
@@ -210,29 +213,50 @@ class MainForm:
         self.code_list.pack(fill="both", expand=True, side="left")
         self.code_list.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.code_list.yview)
+
         self.code_list.bind("<<ListboxSelect>>", self.update_preview)
         self.code_list.bind("<Double-Button-1>", self.apply_from_list)
         self.code_list.bind("<Return>", self.apply_from_list)
         self.code_list.bind("<Button-3>", self.show_context_menu)
 
+        self.paned.add(list_frame, minsize=MIN_HEIGHT)
+
+        # --- PREVIEW FRAME (PANNELLO 2) ---
         self.preview_frame = tk.Frame(self.paned)
-        preview_header = tk.Frame(self.preview_frame)
-        preview_header.pack(fill="x", anchor="w")
-        self.preview_label = tk.Label(preview_header, text="Tag preview")
+
+        # --- HEADER FISSO (altezza costante) ---
+        preview_header = tk.Frame(self.preview_frame, height=28)
+        preview_header.pack(fill="x")
+        preview_header.pack_propagate(False)
+
+        self.preview_label = tk.Label(
+            preview_header,
+            text="Tag preview",
+            anchor="w",
+            pady=4
+        )
         self.preview_label.pack(side="left", fill="x", expand=True)
-        self.preview_label.bind("<Button-1>", lambda e: self.toggle_preview())
+
         self._load_icons()
         symbol = self.collapse_symbol if self.preview_expanded else self.expand_symbol
+
         self.toggle_button = tk.Button(
-            preview_header, text=symbol, command=self.toggle_preview,
-            width=2, height=1, bg=self.bg_color, fg="#303030",
-            activebackground=self.bg_color, activeforeground="#303030", bd=0
+            preview_header,
+            text=symbol,
+            command=self.toggle_preview,
+            width=2,
+            height=1,
+            pady=2,
+            bd=0
         )
-        self.toggle_button.pack(side="right", padx=(4,0))
+        self.toggle_button.pack(side="right", padx=(4, 0))
+
         Tooltip(self.toggle_button, "Expand/collapse tag preview")
 
+        # --- LISTA PREVIEW (si ridimensiona) ---
         preview_inner = tk.Frame(self.preview_frame)
         preview_inner.pack(fill="both", expand=True)
+
         self.preview = tk.Listbox(preview_inner, height=4)
         scrollbar_preview = tk.Scrollbar(preview_inner)
         scrollbar_preview.pack(side="right", fill="y")
@@ -240,10 +264,14 @@ class MainForm:
         self.preview.config(yscrollcommand=scrollbar_preview.set)
         scrollbar_preview.config(command=self.preview.yview)
 
-        self.paned.add(list_frame, minsize=MIN_HEIGHT)
+        # BLOCCA IL CLICK SULLA LISTA DEI TAG
+        self.preview.bind("<Button-1>", lambda e: "break")
+
+        # --- AGGIUNTA AL PANED ---
         minsize_preview = MIN_HEIGHT if self.preview_expanded else 0
         self.paned.add(self.preview_frame, minsize=minsize_preview)
 
+        # --- CONTEXT MENU ---
         self.context_menu = tk.Menu(self.root, tearoff=0)
         self.context_menu.add_command(label="Use", command=self.context_use)
         self.context_menu.add_command(label="Edit", command=self.context_edit)
@@ -370,15 +398,13 @@ class MainForm:
         self.update_preview()
 
     def update_preview(self, event=None):
-        self.preview.delete(0, tk.END)
-        code = None
         sel = self.code_list.curselection()
-        if sel:
-            code = self.code_list.get(sel[0])
-        elif self.filtered_codes:
-            code = self.filtered_codes[0]
-        if not code:
-            return
+        if not sel:
+            return  # non cambiare nulla
+
+        code = self.code_list.get(sel[0])
+
+        self.preview.delete(0, tk.END)
         for t in self.codes.get(code, []):
             self.preview.insert(tk.END, f"{t['key']} = {t['value']}")
 
