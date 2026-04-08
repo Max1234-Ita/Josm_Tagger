@@ -363,5 +363,11 @@
             "key": "landuse",
             "value": "farmyard"
         }
+    ],
+    "bp": [
+        {
+            "key": "building:part",
+            "value": "yes"
+        }
     ]
 }

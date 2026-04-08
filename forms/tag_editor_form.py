@@ -13,6 +13,7 @@ class TagEditorForm:
             inst = TagEditorForm._instance
             inst.root.deiconify()
             inst.root.lift()
+            inst.root.focus_force()
             if preload_code:
                 inst.load_code(preload_code)
             return
@@ -22,14 +23,16 @@ class TagEditorForm:
         self.root = tk.Toplevel(root)
         self.root.title("Tag Editor")
         self.root.attributes("-topmost", True)
+        self.root.attributes("-toolwindow", True)
         self.root.minsize(450, 300)
+
+        # Allow full resizing
+        self.root.resizable(True, True)
 
         # ---------------- Icon ----------------
         import os, sys
 
-        # go up to project root (one folder above /forms)
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-
         ico_path = os.path.join(base_dir, "resources", "josm_tagger.ico")
         png_path = os.path.join(base_dir, "resources", "josm_tagger.png")
 
@@ -52,6 +55,7 @@ class TagEditorForm:
         # Declare attributes
         self._trace_id = None
         self._icon_img = None
+        self._last_geometry = None
 
         # Declare UI attributes
         self.code_var = None
@@ -74,8 +78,56 @@ class TagEditorForm:
         self.build_ui()
         self.apply_font()
 
+        # ---------------- Focus management ----------------
+        self.root.update_idletasks()
+        self.root.deiconify()
+        self.root.lift()
+        self.root.focus_force()
+
+        # opzionale: mantiene il focus finché la finestra è attiva
+        try:
+            self.root.grab_set()
+        except:
+            pass
+
         if self.preload_code:
             self.load_code(self.preload_code)
+
+    def _on_configure(self, event=None):
+        """Prevent window maximize"""
+        # Get current state
+        state = self.root.state()
+
+        # If window is zoomed (maximized), restore to normal
+        if state == 'zoomed':
+            if self._last_geometry:
+                self.root.geometry(self._last_geometry)
+            else:
+                self.root.geometry("750x450")
+        else:
+            # Save geometry for restoration
+            self._last_geometry = self.root.geometry()
+
+    def _check_maximize(self):
+        """Continuously check if window is maximized and prevent it"""
+        try:
+            if self.root.winfo_exists():
+                state = self.root.state()
+                if state == 'zoomed':
+                    # Restore to last saved geometry
+                    self.root.state('normal')
+                    if self._last_geometry:
+                        self.root.geometry(self._last_geometry)
+                    else:
+                        self.root.geometry("750x450")
+                else:
+                    # Save current geometry
+                    self._last_geometry = self.root.geometry()
+
+                # Check again in 50ms
+                self.root.after(50, self._check_maximize)
+        except:
+            pass
 
     # ---------------- UI ----------------
     def build_ui(self):
@@ -330,7 +382,8 @@ class TagEditorForm:
         self.code_var.set(code)
 
         self.update_tag_list()
-        self.entry_key.focus_set()
+        # Keep focus on the code entry field instead of moving to key field
+        self.entry_code.focus_set()
 
     def update_tag_list(self):
         self.tag_list.delete(0, tk.END)
@@ -449,6 +502,9 @@ class TagEditorForm:
         if not code:
             self.entry_code['values'] = sorted(self.codes.keys())
             self.update_code_list()
+            self.tag_list.delete(0, tk.END)
+            self.key_var.set("")
+            self.value_var.set("")
             return
 
         # Filter values
@@ -456,6 +512,12 @@ class TagEditorForm:
         self.entry_code['values'] = filtered
         self.update_code_list(filtered)
 
-        # Load if exact
+        # Load if exact match
         if code in self.codes:
             self.load_code(code)
+        else:
+            # Code doesn't exist - clear tags and fields
+            self.tag_list.delete(0, tk.END)
+            self.key_var.set("")
+            self.value_var.set("")
+            self.current_code = None

@@ -12,6 +12,7 @@ class FontSelectorForm:
         if FontSelectorForm._instance and FontSelectorForm._instance.root.winfo_exists():
             FontSelectorForm._instance.root.deiconify()
             FontSelectorForm._instance.root.lift()
+            FontSelectorForm._instance.root.focus_force()
             return
 
         FontSelectorForm._instance = self
@@ -23,10 +24,18 @@ class FontSelectorForm:
         self.root.title("Font Selector")
         self.root.attributes("-topmost", True)
         self.root.minsize(420, 340)
+        self.root.resizable(True, True)
+
+        # ---------------- WINDOW STYLE ----------------
+        try:
+            if os.name == "nt":
+                self.root.attributes("-toolwindow", True)
+        except:
+            pass
+        # ---------------------------------------------
 
         # ---------------- ICON ----------------
         try:
-            # base path = directory of main.py
             base_path = os.path.dirname(os.path.abspath(sys.argv[0]))
             icon_path_win = os.path.join(base_path, "resources", "josm_tagger.ico")
             icon_path_linux = os.path.join(base_path, "resources", "josm_tagger.png")
@@ -36,7 +45,7 @@ class FontSelectorForm:
             elif os.path.exists(icon_path_linux):
                 icon_img = tk.PhotoImage(file=icon_path_linux)
                 self.root.iconphoto(True, icon_img)
-                self._icon_img = icon_img  # avoid GC
+                self._icon_img = icon_img
         except:
             pass
         # --------------------------------------
@@ -64,6 +73,12 @@ class FontSelectorForm:
         self.size_var.trace_add("write", self._on_size_var_changed)
 
         self.update_preview()
+
+        # ---------------- FOCUS ----------------
+        self.root.lift()
+        self.root.focus_force()
+        self.root.after(10, self.root.focus_force)
+        # --------------------------------------
 
     # --------------------------------------------------
 

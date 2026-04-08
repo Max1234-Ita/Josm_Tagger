@@ -3,13 +3,13 @@ from hotkeys import start_hotkeys
 import tkinter as tk
 
 appname = 'JOSM Tagger'
-appversion = '0.1.0'
-author = 'By M. Mula, 2026'
-appinfo = f'{appname} v.{appversion}\n- {author} -'  # full text to use in About
+appversion = '0.1.1'
+author = 'By Max1234-ITA, 2026'
+appinfo = f'{appname} v.{appversion}\n- {author} -'  # Full text to use in About
 
 # --- Functions ---
 def on_hotkey(app):
-    # re-enter Tkinter thread
+    # Activate widget by pressing the Hotkey combination
     app.root.after(0, app.handle_hotkey)
 
 

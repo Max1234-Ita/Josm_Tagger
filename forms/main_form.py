@@ -11,7 +11,6 @@ from josm_interface import send_tags
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
 
-
 def resource_path(relative_path):
     base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
     return os.path.join(base_path, relative_path)
@@ -47,7 +46,6 @@ class Tooltip:
 class MainForm:
 
     def __init__(self, root):
-
         self.root = root
         self.config = load_config()
         self.codes = load_codes()
@@ -59,10 +57,9 @@ class MainForm:
         theme = self.config.get("theme", {})
         self.bg_color = theme.get("bg", "#2b2b2b")
         self.fg_color = theme.get("fg", "#ffffff")
-
         self.root.configure(bg=self.bg_color)
 
-        # --- APP ICON (PyInstaller compatible) ---
+        # --- APP ICON ---
         try:
             icon_path = resource_path("resources/josm_tagger.ico")
             root.iconbitmap(icon_path)
@@ -70,20 +67,22 @@ class MainForm:
             pass
 
         # --- MIN FORM SIZE ---
-        # Allow vertical shrinking down to accommodate the code list minsize (80) + top frame + padding
         self.root.minsize(256, 160)
+
+        # --- DISABLE MAXIMIZE BUTTON ---
+        try:
+            self.root.attributes("-toolwindow", True)
+        except:
+            pass
 
         # --- GEOMETRY ---
         self.apply_geometry()
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        self.filtered_codes = []
-
         # Declare attributes
+        self.filtered_codes = []
         self._trace_id = None
-
-        # Declare instance attributes to avoid warnings
         self.code_var = None
         self.entry = None
         self.apply_button = None
@@ -101,103 +100,63 @@ class MainForm:
         self.build_menu()
         self.build_ui()
         self.register_hotkey()
-
         self.apply_font()
         self.update_list()
 
     def apply_geometry(self):
-
         geom = self.config.get("geometry", {}).get("main_form")
-
         if geom:
             try:
                 x = geom.get("x", 100)
                 y = geom.get("y", 100)
                 w = geom.get("w", 560)
                 h = geom.get("h", 520)
-
                 self.root.geometry(f"{w}x{h}+{x}+{y}")
                 return
             except:
                 pass
-
-        # default fallback
         self.root.geometry("560x520")
 
     def save_geometry(self):
-
         try:
             self.root.update_idletasks()
-
             geom_str = self.root.geometry()
             size, pos = geom_str.split("+", 1)
             w, h = size.split("x")
             x, y = pos.split("+")
-
             if "geometry" not in self.config:
                 self.config["geometry"] = {}
-
             self.config["geometry"]["main_form"] = {
                 "x": int(x),
                 "y": int(y),
                 "w": int(w),
                 "h": int(h)
             }
-
-            # Save preview state
             self.config["preview_expanded"] = self.preview_expanded
-
             save_config(self.config)
-
         except:
             pass
 
     def _load_icons(self):
-        """Use Unicode symbols for toggle button (Pillow doesn't support SVG)"""
-        # Using Unicode arrows instead of SVG files
-        self.expand_symbol = "▼"  # Down arrow for expand
-        self.collapse_symbol = "▲"  # Up arrow for collapse
+        """Use Unicode symbols for toggle button"""
+        self.expand_symbol = "▼"
+        self.collapse_symbol = "▲"
         self.expand_image = None
         self.collapse_image = None
 
     def toggle_preview(self):
         """Toggle preview visibility"""
         self.preview_expanded = not self.preview_expanded
-
-        # Change minsize instead of removing/adding to keep button visible
-        minsize = 80 if self.preview_expanded else 0
-        self.paned.paneconfigure(self.preview_frame, minsize=minsize)
-
-        self.toggle_button.config(text=self.collapse_symbol if self.preview_expanded else self.expand_symbol)
-
-        # Adjust window height
-        self.root.update_idletasks()
-        geom_str = self.root.geometry()
-        size, pos = geom_str.split("+", 1)
-        w, h = size.split("x")
-        x, y = pos.split("+")
-
-        current_height = int(h)
-        expanded_height = self.config.get("preview_expanded_height", 240)
-
-        if self.preview_expanded:
-            # Expand: increase height
-            new_height = current_height + expanded_height
-            self.root.geometry(f"{w}x{new_height}+{x}+{y}")
-        else:
-            # Collapse: set to minsize
-            self.root.geometry(f"{w}x160+{x}+{y}")
-
-        self.save_geometry()
+        self.toggle_button.config(
+            text=self.collapse_symbol if self.preview_expanded else self.expand_symbol
+        )
 
     def on_close(self):
-
         self.save_geometry()
         self.root.destroy()
 
     # ---------------- MENU ----------------
     def build_menu(self):
-
         self.menubar = tk.Menu(self.root)
 
         file_menu = tk.Menu(self.menubar, tearoff=0)
@@ -211,20 +170,18 @@ class MainForm:
         view_menu = tk.Menu(self.menubar, tearoff=0)
         view_menu.add_command(label="Font", command=self.select_font)
 
-        about_menu = tk.Menu(self.menubar, tearoff=0 )
+        about_menu = tk.Menu(self.menubar, tearoff=0)
         about_menu.add_command(label='About', command=self.show_about)
 
         self.menubar.add_cascade(label="File", menu=file_menu)
         self.menubar.add_cascade(label="Edit", menu=edit_menu)
         self.menubar.add_cascade(label="View", menu=view_menu)
         self.menubar.add_cascade(label="   ?", menu=about_menu)
-        # self.menubar.add_cascade(label="    ?", menu=)
 
         self.root.config(menu=self.menubar)
 
     # ---------------- UI ----------------
     def build_ui(self):
-
         top = tk.Frame(self.root)
         top.pack(fill="x", padx=6, pady=6)
 
@@ -233,10 +190,8 @@ class MainForm:
         self.code_var = tk.StringVar()
         self._trace_id = self.code_var.trace_add("write", self.filter_codes)
 
-        # --- CHANGED: Entry to Combobox ---
         self.entry = ttk.Combobox(top, textvariable=self.code_var, width=10)
         self.entry.pack(fill="x", expand=True, side="left", padx=(4, 4))
-
         self.entry.bind("<Return>", self.apply_code)
         self.entry.bind("<Down>", self.focus_list)
         self.entry.bind("<Escape>", self.clear_input)
@@ -248,94 +203,61 @@ class MainForm:
         self.paned.pack(fill="both", expand=True, padx=6, pady=6)
 
         MIN_HEIGHT = 80
-
-        # --- CODES LIST ---
         list_frame = tk.Frame(self.paned)
-
         self.code_list = tk.Listbox(list_frame, height=4)
-
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side="right", fill="y")
         self.code_list.pack(fill="both", expand=True, side="left")
-
         self.code_list.config(yscrollcommand=scrollbar.set)
         scrollbar.config(command=self.code_list.yview)
-
         self.code_list.bind("<<ListboxSelect>>", self.update_preview)
         self.code_list.bind("<Double-Button-1>", self.apply_from_list)
         self.code_list.bind("<Return>", self.apply_from_list)
-
-        # --- NEW: RIGHT CLICK ---
         self.code_list.bind("<Button-3>", self.show_context_menu)
 
-        # --- PREVIEW ---
         self.preview_frame = tk.Frame(self.paned)
-
         preview_header = tk.Frame(self.preview_frame)
         preview_header.pack(fill="x", anchor="w")
-
-        tk.Label(preview_header, text="Tag preview").pack(side="left")
-
-        # Load SVG icons
+        self.preview_label = tk.Label(preview_header, text="Tag preview")
+        self.preview_label.pack(side="left", fill="x", expand=True)
+        self.preview_label.bind("<Button-1>", lambda e: self.toggle_preview())
         self._load_icons()
-
         symbol = self.collapse_symbol if self.preview_expanded else self.expand_symbol
-
         self.toggle_button = tk.Button(
-            preview_header,
-            text=symbol,
-            command=self.toggle_preview,
-            width=2,
-            height=1,
-            bg=self.bg_color,
-            fg="#303030",
-            activebackground=self.bg_color,
-            activeforeground="#303030",
-            bd=0
+            preview_header, text=symbol, command=self.toggle_preview,
+            width=2, height=1, bg=self.bg_color, fg="#303030",
+            activebackground=self.bg_color, activeforeground="#303030", bd=0
         )
-        self.toggle_button.pack(side="right", padx=(4, 0))
-
-        # Add tooltip
+        self.toggle_button.pack(side="right", padx=(4,0))
         Tooltip(self.toggle_button, "Expand/collapse tag preview")
 
         preview_inner = tk.Frame(self.preview_frame)
         preview_inner.pack(fill="both", expand=True)
-
         self.preview = tk.Listbox(preview_inner, height=4)
-
         scrollbar_preview = tk.Scrollbar(preview_inner)
         scrollbar_preview.pack(side="right", fill="y")
         self.preview.pack(fill="both", expand=True, side="left")
-
         self.preview.config(yscrollcommand=scrollbar_preview.set)
         scrollbar_preview.config(command=self.preview.yview)
 
         self.paned.add(list_frame, minsize=MIN_HEIGHT)
-
-        # Always add preview frame, but with minsize 0 if not expanded
         minsize_preview = MIN_HEIGHT if self.preview_expanded else 0
         self.paned.add(self.preview_frame, minsize=minsize_preview)
 
-        # --- CONTEXT MENU ---
         self.context_menu = tk.Menu(self.root, tearoff=0)
         self.context_menu.add_command(label="Use", command=self.context_use)
         self.context_menu.add_command(label="Edit", command=self.context_edit)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Delete", command=self.context_delete)
 
-    # ---------- CONTEXT MENU ----------
+    # ---------------- CONTEXT MENU ----------------
     def show_context_menu(self, event):
-
         index = self.code_list.nearest(event.y)
-
         if index < 0:
             return
-
         self.code_list.selection_clear(0, tk.END)
         self.code_list.selection_set(index)
-
         self.update_preview()
-
         try:
             self.context_menu.tk_popup(event.x_root, event.y_root)
         finally:
@@ -349,55 +271,32 @@ class MainForm:
         self.apply_from_list()
 
     def context_edit(self):
-
         sel = self.code_list.curselection()
         if not sel:
             return
-
         code = self.code_list.get(sel[0])
-
-        # open editor with correct selection
-        TagEditorForm(
-            self.root,
-            self.codes,
-            preload_code=code
-        )
+        TagEditorForm(self.root, self.codes, preload_code=code)
 
     def context_delete(self):
-
         import tkinter.messagebox as messagebox
-
         sel = self.code_list.curselection()
         if not sel:
             return
-
         code = self.code_list.get(sel[0])
-
-        confirm = messagebox.askyesno(
-            "Delete",
-            f"Delete code '{code}'?"
-        )
-
+        confirm = messagebox.askyesno("Delete", f"Delete code '{code}'?")
         if not confirm:
             return
-
         if code in self.codes:
             del self.codes[code]
-
             from codes_manager import save_codes
             save_codes(self.codes)
-
             self.update_list()
             self.preview.delete(0, tk.END)
 
     # ---------------- FONT ----------------
     def apply_font(self):
-
-        f = (self.config.get("font_family", "Segoe UI"),
-             int(self.config.get("font_size", 10)))
-
+        f = (self.config.get("font_family", "Segoe UI"), int(self.config.get("font_size", 10)))
         self.root.option_add("*Font", f)
-
         def apply(widget):
             try:
                 widget.configure(font=f)
@@ -405,7 +304,6 @@ class MainForm:
                 pass
             for c in widget.winfo_children():
                 apply(c)
-
         apply(self.root)
 
     def select_font(self):
@@ -418,23 +316,17 @@ class MainForm:
 
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
-        keyboard.add_hotkey(
-            self.config.get("hotkey", "ctrl+num 0"),
-            lambda: self.root.after(0, self.hotkey_trigger)
-        )
+        keyboard.add_hotkey(self.config.get("hotkey", "ctrl+num 0"), lambda: self.root.after(0, self.hotkey_trigger))
 
     def hotkey_trigger(self):
         self.focus_input()
 
     def focus_input(self):
-
         self.root.deiconify()
         self.root.lift()
         self.root.attributes("-topmost", True)
-
         self.root.after(10, self._force_focus)
         self.root.after(50, self._force_focus)
-
         self.flash_window()
 
     def _force_focus(self):
@@ -455,90 +347,61 @@ class MainForm:
 
     # ---------------- CODES LOGIC ----------------
     def update_list(self):
-
         self.code_list.delete(0, tk.END)
-
         self.filtered_codes = sorted(self.codes)
-
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
-
         self.entry['values'] = self.filtered_codes
 
     def filter_codes(self, *args):
-
         text = self.code_var.get().lower()
-
         self.code_list.delete(0, tk.END)
-
-        self.filtered_codes = sorted(
-            [c for c in self.codes if c.lower().startswith(text.lower())]
-        )
-
+        self.filtered_codes = sorted([c for c in self.codes if c.lower().startswith(text.lower())])
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
-
         self.entry['values'] = self.filtered_codes
-
         self.update_preview()
 
     def focus_list(self, event):
-
         if self.code_list.size() == 0:
             return
-
         self.code_list.focus_set()
         self.code_list.selection_set(0)
-
         self.update_preview()
 
     def update_preview(self, event=None):
-
         self.preview.delete(0, tk.END)
-
         code = None
-
         sel = self.code_list.curselection()
-
         if sel:
             code = self.code_list.get(sel[0])
         elif self.filtered_codes:
             code = self.filtered_codes[0]
-
         if not code:
             return
-
         for t in self.codes.get(code, []):
             self.preview.insert(tk.END, f"{t['key']} = {t['value']}")
 
     # ---------------- APPLY ----------------
     def apply_from_list(self, event=None):
-
         sel = self.code_list.curselection()
-
         if not sel:
             return
-
         code = self.code_list.get(sel[0])
         self.send(code)
         self._reset_input()
 
     def apply_code(self, event=None):
-
         code = self.code_var.get().strip()
-
         if code in self.codes:
             self.send(code)
             self._reset_input()
             return
-
         sel = self.code_list.curselection()
-
         if sel:
             self.send(self.code_list.get(sel[0]))
             self._reset_input()
             return
-
         if self.filtered_codes:
             self.send(self.filtered_codes[0])
             self._reset_input()
@@ -551,12 +414,7 @@ class MainForm:
         self._reset_input()
 
     def send(self, code):
-
-        threading.Thread(
-            target=send_tags,
-            args=(self.codes[code],),
-            daemon=True
-        ).start()
+        threading.Thread(target=send_tags, args=(self.codes[code],), daemon=True).start()
 
     # ---------------- OTHER ----------------
     def reload_codes(self):
