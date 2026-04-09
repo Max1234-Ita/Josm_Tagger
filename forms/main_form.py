@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import tkinter as tk
 import tkinter.ttk as ttk
 import threading
@@ -11,9 +12,11 @@ from josm_interface import send_tags
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
 
+
 def resource_path(relative_path):
     base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
     return os.path.join(base_path, relative_path)
+
 
 class Tooltip:
     """Simple tooltip widget for Tkinter"""
@@ -21,8 +24,6 @@ class Tooltip:
         self.widget = widget
         self.text = text
         self.tipwindow = None
-        self.id = None
-        self.x = self.y = 0
         widget.bind("<Enter>", self.showtip)
         widget.bind("<Leave>", self.hidetip)
 
@@ -34,7 +35,14 @@ class Tooltip:
         self.tipwindow = tw = tk.Toplevel(self.widget)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
-        label = tk.Label(tw, text=self.text, background="#ffffe0", relief=tk.SOLID, borderwidth=1, font=("Arial", 8))
+        label = tk.Label(
+            tw,
+            text=self.text,
+            background="#ffffe0",
+            relief=tk.SOLID,
+            borderwidth=1,
+            font=("Arial", 8)
+        )
         label.pack(ipadx=1)
 
     def hidetip(self, event=None):
@@ -42,6 +50,7 @@ class Tooltip:
         self.tipwindow = None
         if tw:
             tw.destroy()
+
 
 class MainForm:
 
@@ -95,7 +104,12 @@ class MainForm:
         self.toggle_button = None
         self.expand_image = None
         self.collapse_image = None
+
+        # Stato pannello inferiore
         self.preview_expanded = self.config.get("preview_expanded", True)
+        self.preview_expanded_height = self.config.get("preview_expanded_height", 120)
+        self.preview_height = self.config.get("preview_height", 150)
+        self.upper_height = self.config.get("upper_height", None)
 
         self.build_menu()
         self.build_ui()
@@ -103,6 +117,9 @@ class MainForm:
         self.apply_font()
         self.update_list()
 
+    # ---------------------------------------------------------
+    # GEOMETRY
+    # ---------------------------------------------------------
     def apply_geometry(self):
         geom = self.config.get("geometry", {}).get("main_form")
         if geom:
@@ -118,42 +135,38 @@ class MainForm:
         self.root.geometry("560x520")
 
     def save_geometry(self):
-        try:
-            self.root.update_idletasks()
-            geom_str = self.root.geometry()
-            size, pos = geom_str.split("+", 1)
-            w, h = size.split("x")
-            x, y = pos.split("+")
-            if "geometry" not in self.config:
-                self.config["geometry"] = {}
-            self.config["geometry"]["main_form"] = {
-                "x": int(x),
-                "y": int(y),
-                "w": int(w),
-                "h": int(h)
-            }
-            self.config["preview_expanded"] = self.preview_expanded
-            save_config(self.config)
-        except:
-            pass
+        """
+        Salva solo la geometria della finestra principale (posizione e dimensioni).
+        Non modifica altre impostazioni del config.
+        """
+        x = self.root.winfo_x()
+        y = self.root.winfo_y()
+        w = self.root.winfo_width()
+        h = self.root.winfo_height()
 
-    def _load_icons(self):
-        """Use Unicode symbols for toggle button"""
-        self.expand_symbol = "▼"
-        self.collapse_symbol = "▲"
-        self.expand_image = None
-        self.collapse_image = None
+        if "geometry" not in self.config:
+            self.config["geometry"] = {}
 
-    def toggle_preview(self):
-        """Toggle preview visibility"""
-        self.preview_expanded = not self.preview_expanded
-        self.toggle_button.config(
-            text=self.collapse_symbol if self.preview_expanded else self.expand_symbol
-        )
+        self.config["geometry"]["main_form"] = {
+            "x": x,
+            "y": y,
+            "w": w,
+            "h": h
+        }
 
-    def on_close(self):
-        self.save_geometry()
-        self.root.destroy()
+        with open("config.json", "w", encoding="utf-8") as f:
+            json.dump(self.config, f, indent=2)
+
+    def save_config(self):
+        """
+        Salva lo stato del pannello inferiore e le altezze dei pannelli.
+        """
+        self.config["preview_expanded"] = self.preview_expanded
+        self.config["preview_height"] = self.preview_height
+        self.config["upper_height"] = self.upper_height
+
+        with open("config.json", "w", encoding="utf-8") as f:
+            json.dump(self.config, f, indent=2)
 
     # ---------------- MENU ----------------
     def build_menu(self):
@@ -204,9 +217,13 @@ class MainForm:
         self.paned = tk.PanedWindow(self.root, orient="vertical", sashrelief="raised")
         self.paned.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # --- LISTA CODICI (PANNELLO 1 - RIDIMENSIONABILE) ---
-        MIN_HEIGHT = 80
-        list_frame = tk.Frame(self.paned)
+        # --- PANNELLO SUPERIORE (lista codici + header preview) ---
+        upper_frame = tk.Frame(self.paned)
+
+        # LISTA CODICI
+        list_frame = tk.Frame(upper_frame)
+        list_frame.pack(fill="both", expand=True)
+
         self.code_list = tk.Listbox(list_frame, height=4)
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side="right", fill="y")
@@ -219,22 +236,12 @@ class MainForm:
         self.code_list.bind("<Return>", self.apply_from_list)
         self.code_list.bind("<Button-3>", self.show_context_menu)
 
-        self.paned.add(list_frame, minsize=MIN_HEIGHT)
-
-        # --- PREVIEW FRAME (PANNELLO 2) ---
-        self.preview_frame = tk.Frame(self.paned)
-
-        # --- HEADER FISSO (altezza costante) ---
-        preview_header = tk.Frame(self.preview_frame, height=28)
+        # HEADER PREVIEW (ora sotto la lista codici)
+        preview_header = tk.Frame(upper_frame, height=28)
         preview_header.pack(fill="x")
         preview_header.pack_propagate(False)
 
-        self.preview_label = tk.Label(
-            preview_header,
-            text="Tag preview",
-            anchor="w",
-            pady=4
-        )
+        self.preview_label = tk.Label(preview_header, text="Tag preview", anchor="w", pady=4)
         self.preview_label.pack(side="left", fill="x", expand=True)
 
         self._load_icons()
@@ -253,7 +260,12 @@ class MainForm:
 
         Tooltip(self.toggle_button, "Expand/collapse tag preview")
 
-        # --- LISTA PREVIEW (si ridimensiona) ---
+        # AGGIUNTA DEL PANNELLO SUPERIORE AL PANED
+        self.paned.add(upper_frame, minsize=80)
+
+        # --- PANNELLO INFERIORE (preview) ---
+        self.preview_frame = tk.Frame(self.paned)
+
         preview_inner = tk.Frame(self.preview_frame)
         preview_inner.pack(fill="both", expand=True)
 
@@ -267,8 +279,8 @@ class MainForm:
         # BLOCCA IL CLICK SULLA LISTA DEI TAG
         self.preview.bind("<Button-1>", lambda e: "break")
 
-        # --- AGGIUNTA AL PANED ---
-        minsize_preview = MIN_HEIGHT if self.preview_expanded else 0
+        # Altezza iniziale del pannello inferiore
+        minsize_preview = 80 if self.preview_expanded else 0
         self.paned.add(self.preview_frame, minsize=minsize_preview)
 
         # --- CONTEXT MENU ---
@@ -277,6 +289,100 @@ class MainForm:
         self.context_menu.add_command(label="Edit", command=self.context_edit)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Delete", command=self.context_delete)
+
+    def on_close(self):
+        """Gestisce la chiusura della finestra salvando la geometria."""
+        self.save_geometry()
+        self.root.destroy()
+
+    def _load_icons(self):
+        """Inizializza i simboli del pulsante di espansione/collasso."""
+        self.expand_symbol = "▼"
+        self.collapse_symbol = "▲"
+        self.expand_image = None
+        self.collapse_image = None
+
+    # ---------------- TOGGLE PREVIEW ----------------
+    def toggle_preview(self):
+        """
+        Espande o collassa il pannello inferiore mantenendo:
+        - l'altezza del pannello superiore (upper_height)
+        - un'altezza fissa per il pannello inferiore (preview_height, da config)
+        """
+        # Inverte lo stato
+        self.preview_expanded = not self.preview_expanded
+        print("preview_expanded =", self.preview_expanded)
+
+        # Aggiorna icona
+        self.toggle_button.config(
+            text=self.collapse_symbol if self.preview_expanded else self.expand_symbol
+        )
+
+        self.root.update_idletasks()
+
+        # Misura finestra attuale
+        w = self.root.winfo_width()
+        h = self.root.winfo_height()
+
+        if self.preview_expanded:
+            # --- ESPANSIONE ---
+
+            # Se non abbiamo ancora upper_height valido, stimiamolo ora
+            if self.upper_height is None:
+                try:
+                    # Se il paned ha solo il pannello superiore, la sua altezza è l'intero paned
+                    self.upper_height = self.paned.winfo_height()
+                except Exception:
+                    self.upper_height = 200
+
+            # Aumenta la finestra per fare spazio al pannello inferiore
+            new_h = h + self.preview_height
+            self.root.geometry(f"{w}x{new_h}")
+            self.root.update_idletasks()
+
+            # Ri-aggiunge il pannello inferiore
+            try:
+                self.paned.add(self.preview_frame, minsize=80)
+            except tk.TclError:
+                pass
+
+            self.root.update_idletasks()
+
+            # Ripristina l'altezza del pannello superiore
+            try:
+                self.paned.sash_place(0, 0, self.upper_height)
+            except Exception:
+                pass
+
+        else:
+            # --- COLLASSO ---
+            self.root.update_idletasks()
+
+            # Memorizza l'altezza del pannello superiore tramite sash
+            try:
+                self.upper_height = self.paned.sash_coord(0)[1]
+            except Exception:
+                self.upper_height = 200
+
+            # Misura altezza attuale del pannello inferiore
+            current_h = self.preview_frame.winfo_height()
+
+            # Rimuove il pannello inferiore
+            try:
+                self.paned.forget(self.preview_frame)
+            except tk.TclError:
+                pass
+
+            # Riduce la finestra dell'altezza effettiva del pannello inferiore
+            new_h = h - current_h
+            if new_h < 200:
+                new_h = 200
+
+            self.root.geometry(f"{w}x{new_h}")
+
+        # Salva stato e altezze (preview_height NON viene più toccato qui)
+        self.save_config()
+        self.root.update_idletasks()
 
     # ---------------- CONTEXT MENU ----------------
     def show_context_menu(self, event):
@@ -323,8 +429,10 @@ class MainForm:
 
     # ---------------- FONT ----------------
     def apply_font(self):
-        f = (self.config.get("font_family", "Segoe UI"), int(self.config.get("font_size", 10)))
+        f = (self.config.get("font_family", "Segoe UI"),
+             int(self.config.get("font_size", 10)))
         self.root.option_add("*Font", f)
+
         def apply(widget):
             try:
                 widget.configure(font=f)
@@ -332,6 +440,7 @@ class MainForm:
                 pass
             for c in widget.winfo_children():
                 apply(c)
+
         apply(self.root)
 
     def select_font(self):
@@ -344,7 +453,10 @@ class MainForm:
 
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
-        keyboard.add_hotkey(self.config.get("hotkey", "ctrl+num 0"), lambda: self.root.after(0, self.hotkey_trigger))
+        keyboard.add_hotkey(
+            self.config.get("hotkey", "ctrl+num 0"),
+            lambda: self.root.after(0, self.hotkey_trigger)
+        )
 
     def hotkey_trigger(self):
         self.focus_input()
@@ -384,7 +496,9 @@ class MainForm:
     def filter_codes(self, *args):
         text = self.code_var.get().lower()
         self.code_list.delete(0, tk.END)
-        self.filtered_codes = sorted([c for c in self.codes if c.lower().startswith(text.lower())])
+        self.filtered_codes = sorted(
+            [c for c in self.codes if c.lower().startswith(text)]
+        )
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
         self.entry['values'] = self.filtered_codes
@@ -400,7 +514,7 @@ class MainForm:
     def update_preview(self, event=None):
         sel = self.code_list.curselection()
         if not sel:
-            return  # non cambiare nulla
+            return
 
         code = self.code_list.get(sel[0])
 
@@ -423,11 +537,13 @@ class MainForm:
             self.send(code)
             self._reset_input()
             return
+
         sel = self.code_list.curselection()
         if sel:
             self.send(self.code_list.get(sel[0]))
             self._reset_input()
             return
+
         if self.filtered_codes:
             self.send(self.filtered_codes[0])
             self._reset_input()
@@ -440,7 +556,11 @@ class MainForm:
         self._reset_input()
 
     def send(self, code):
-        threading.Thread(target=send_tags, args=(self.codes[code],), daemon=True).start()
+        threading.Thread(
+            target=send_tags,
+            args=(self.codes[code],),
+            daemon=True
+        ).start()
 
     # ---------------- OTHER ----------------
     def reload_codes(self):
