@@ -305,11 +305,21 @@ class MainForm:
     # ---------------- TOGGLE PREVIEW ----------------
     def toggle_preview(self):
         """
-        Espande o collassa il pannello inferiore mantenendo:
-        - l'altezza del pannello superiore (upper_height)
-        - un'altezza fissa per il pannello inferiore (preview_height, da config)
+        Collassa o espande il pannello inferiore seguendo la logica richiesta:
+
+        - In chiusura:
+            * misura upper e lower
+            * salva nel config
+            * imposta la finestra all'altezza del solo pannello superiore
+
+        - In apertura:
+            * misura l'upper attuale
+            * recupera upper e lower dal config
+            * imposta la finestra alla somma
+            * riaggiunge il pannello inferiore
+            * ripristina l'upper salvato
         """
-        # Inverte lo stato
+
         self.preview_expanded = not self.preview_expanded
         print("preview_expanded =", self.preview_expanded)
 
@@ -324,23 +334,66 @@ class MainForm:
         w = self.root.winfo_width()
         h = self.root.winfo_height()
 
-        if self.preview_expanded:
-            # --- ESPANSIONE ---
+        if not self.preview_expanded:
+            # ---------------------------------------------------------
+            # 🔻 COLLASSO
+            # ---------------------------------------------------------
+            self.root.update_idletasks()
 
-            # Se non abbiamo ancora upper_height valido, stimiamolo ora
-            if self.upper_height is None:
-                try:
-                    # Se il paned ha solo il pannello superiore, la sua altezza è l'intero paned
-                    self.upper_height = self.paned.winfo_height()
-                except Exception:
-                    self.upper_height = 200
+            # 1. Misura altezza pannello superiore
+            try:
+                self.upper_height = self.paned.sash_coord(0)[1]
+            except Exception:
+                self.upper_height = self.paned.winfo_height()
 
-            # Aumenta la finestra per fare spazio al pannello inferiore
-            new_h = h + self.preview_height
+            # 2. Misura altezza pannello inferiore
+            try:
+                self.preview_height = self.preview_frame.winfo_height()
+            except Exception:
+                self.preview_height = 150
+
+            # 3. Imposta la finestra all'altezza del solo pannello superiore
+            # new_h = self.upper_height
+            new_h = h - self.preview_height
+            if new_h < 200:
+                new_h = 200
+
             self.root.geometry(f"{w}x{new_h}")
             self.root.update_idletasks()
 
-            # Ri-aggiunge il pannello inferiore
+            # 4. Rimuove il pannello inferiore
+            try:
+                self.paned.forget(self.preview_frame)
+            except tk.TclError:
+                pass
+
+            # 5. Salva tutto
+            self.save_config()
+            return
+
+        else:
+            # ---------------------------------------------------------
+            # 🔺 ESPANSIONE
+            # ---------------------------------------------------------
+            self.root.update_idletasks()
+
+            # 1. Misura l'altezza attuale del pannello superiore
+            try:
+                current_upper = self.paned.sash_coord(0)[1]
+            except Exception:
+                current_upper = self.paned.winfo_height()
+
+            # 2. Recupera dal config le altezze salvate
+            upper_h = self.upper_height if self.upper_height else current_upper
+            lower_h = self.preview_height if self.preview_height else 150
+
+            # 3. Imposta la finestra alla somma
+            # new_h = upper_h + lower_h
+            new_h = h + lower_h  # Aggiusta altezza attuale con altezza pannello inferiore
+            self.root.geometry(f"{w}x{new_h}")
+            self.root.update_idletasks()
+
+            # 4. Riaggiunge il pannello inferiore
             try:
                 self.paned.add(self.preview_frame, minsize=80)
             except tk.TclError:
@@ -348,41 +401,16 @@ class MainForm:
 
             self.root.update_idletasks()
 
-            # Ripristina l'altezza del pannello superiore
+            # 5. Ripristina upper_height tramite sash
             try:
-                self.paned.sash_place(0, 0, self.upper_height)
+                # self.paned.sash_place(0, 0, upper_h)
+                self.paned.sash_place(0, 0, current_upper)
             except Exception:
                 pass
 
-        else:
-            # --- COLLASSO ---
-            self.root.update_idletasks()
-
-            # Memorizza l'altezza del pannello superiore tramite sash
-            try:
-                self.upper_height = self.paned.sash_coord(0)[1]
-            except Exception:
-                self.upper_height = 200
-
-            # Misura altezza attuale del pannello inferiore
-            current_h = self.preview_frame.winfo_height()
-
-            # Rimuove il pannello inferiore
-            try:
-                self.paned.forget(self.preview_frame)
-            except tk.TclError:
-                pass
-
-            # Riduce la finestra dell'altezza effettiva del pannello inferiore
-            new_h = h - current_h
-            if new_h < 200:
-                new_h = 200
-
-            self.root.geometry(f"{w}x{new_h}")
-
-        # Salva stato e altezze (preview_height NON viene più toccato qui)
-        self.save_config()
-        self.root.update_idletasks()
+            # 6. Salva tutto
+            self.save_config()
+            return
 
     # ---------------- CONTEXT MENU ----------------
     def show_context_menu(self, event):
