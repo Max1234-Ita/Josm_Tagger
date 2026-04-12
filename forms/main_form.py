@@ -319,6 +319,9 @@ class MainForm:
 
         # Same row → do nothing
         if self._list_tooltip_last_index == index:
+            # Update position only
+            if self._list_tooltip_window:
+                self._list_tooltip_window.wm_geometry(f"+{event.x_root + 10}+{event.y_root + 10}")
             return
 
         self._list_tooltip_last_index = index
@@ -336,6 +339,7 @@ class MainForm:
         # Show tooltip near cursor
         self._show_list_tooltip(event.x_root + 10, event.y_root + 10, text)
 
+
     def _on_list_leave(self, event):
         """Hide tooltip when leaving the listbox."""
         self._hide_list_tooltip()
@@ -347,18 +351,21 @@ class MainForm:
         tw = tk.Toplevel(self.code_list)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
-        tw.wm_attributes("-topmost", True)  # 🔥 FIX: tooltip always visible
+        tw.wm_attributes("-topmost", True)  # 🔥 required because main window is topmost
 
         label = tk.Label(
             tw,
             text=text,
-            background="#ffffe0",
-            relief=tk.SOLID,
-            borderwidth=1,
+            bg="#ffffe0",
+            fg="black",
             justify="left",
-            font=("Arial", 8)
+            font=self.entry.cget("font"),
+            relief="solid",
+            borderwidth=1,
+            highlightthickness=1,
+            highlightbackground="#aaaaaa"  # 🔥 soft border effect
         )
-        label.pack(ipadx=1, ipady=1)
+        label.pack(ipadx=4, ipady=2)
 
         self._list_tooltip_window = tw
 

@@ -253,7 +253,7 @@
     ],
     "flink": [
         {
-            "key": "higway",
+            "key": "highway",
             "value": "footway"
         },
         {
