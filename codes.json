@@ -369,5 +369,18 @@
             "key": "building:part",
             "value": "yes"
         }
+    ],
+    "bl2": [
+        {
+            "key": "building:levels",
+            "value": "2"
+        }
+    ],
+    "bl3": [],
+    "blx": [
+        {
+            "key": "building:levels",
+            "value": "###"
+        }
     ]
 }

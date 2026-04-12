@@ -19,7 +19,7 @@ def resource_path(relative_path):
 
 
 class Tooltip:
-    """Simple tooltip widget for Tkinter"""
+    """Simple tooltip widget for Tkinter."""
     def __init__(self, widget, text):
         self.widget = widget
         self.text = text
@@ -89,7 +89,7 @@ class MainForm:
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_close)
 
-        # Declare attributes
+        # Declared attributes
         self.filtered_codes = []
         self._trace_id = None
         self.code_var = None
@@ -105,21 +105,23 @@ class MainForm:
         self.expand_image = None
         self.collapse_image = None
 
-        # Stato pannelli
+        # Panel state
         self.preview_expanded = self.config.get("preview_expanded", True)
-        # self.preview_height = self.config.get("preview_height", 150)
-        self.preview_height = max(160, self.config.get("preview_height", 150))
-
+        self.preview_height = max(160, self.config.get("preview_height", 160))
         self.upper_height = self.config.get("upper_height", None)
 
-        # Costruzione GUI
+        # Build GUI
         self.build_menu()
         self.build_ui()
         self.register_hotkey()
         self.apply_font()
         self.update_list()
 
-        # Ripristino layout pannelli dopo che Tk ha stabilizzato il layout
+        # Tooltip
+        self._list_tooltip_window = None
+        self._list_tooltip_last_index = None
+
+        # Restore panes layout after Tk has stabilized geometry
         self.root.after_idle(self._restore_panes_layout)
 
     # ---------------------------------------------------------
@@ -141,8 +143,8 @@ class MainForm:
 
     def save_geometry(self):
         """
-        Salva solo la geometria della finestra principale (posizione e dimensioni).
-        Non modifica altre impostazioni del config.
+        Save only the main window geometry (position and size).
+        Does not modify other config settings.
         """
         x = self.root.winfo_x()
         y = self.root.winfo_y()
@@ -164,7 +166,7 @@ class MainForm:
 
     def save_config(self):
         """
-        Salva lo stato del pannello inferiore e le altezze dei pannelli.
+        Save preview panel state and pane heights.
         """
         self.config["preview_expanded"] = self.preview_expanded
         self.config["preview_height"] = self.preview_height
@@ -189,7 +191,7 @@ class MainForm:
         view_menu.add_command(label="Font", command=self.select_font)
 
         about_menu = tk.Menu(self.menubar, tearoff=0)
-        about_menu.add_command(label='About', command=self.show_about)
+        about_menu.add_command(label="About", command=self.show_about)
 
         self.menubar.add_cascade(label="File", menu=file_menu)
         self.menubar.add_cascade(label="Edit", menu=edit_menu)
@@ -222,13 +224,16 @@ class MainForm:
         self.paned = tk.PanedWindow(self.root, orient="vertical", sashrelief="raised")
         self.paned.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # --- PANNELLO SUPERIORE ---
+        # --- UPPER PANEL ---
         upper_frame = tk.Frame(self.paned)
 
         list_frame = tk.Frame(upper_frame)
         list_frame.pack(fill="both", expand=True)
 
         self.code_list = tk.Listbox(list_frame, height=4)
+        self.code_list.bind("<Motion>", self._on_list_motion)
+        self.code_list.bind("<Leave>", self._on_list_leave)
+
         scrollbar = tk.Scrollbar(list_frame)
         scrollbar.pack(side="right", fill="y")
         self.code_list.pack(fill="both", expand=True, side="left")
@@ -240,7 +245,7 @@ class MainForm:
         self.code_list.bind("<Return>", self.apply_from_list)
         self.code_list.bind("<Button-3>", self.show_context_menu)
 
-        # HEADER PREVIEW
+        # Preview header
         preview_header = tk.Frame(upper_frame, height=28)
         preview_header.pack(fill="x")
         preview_header.pack_propagate(False)
@@ -264,11 +269,11 @@ class MainForm:
 
         Tooltip(self.toggle_button, "Expand/collapse tag preview")
 
-        # Altezza minima del pannello superiore (fissa)
+        # Fixed minimum height for upper panel
         self.MIN_UPPER = 160
         self.paned.add(upper_frame, minsize=self.MIN_UPPER)
 
-        # --- PANNELLO INFERIORE ---
+        # --- LOWER PANEL (PREVIEW) ---
         self.preview_frame = tk.Frame(self.paned)
 
         preview_inner = tk.Frame(self.preview_frame)
@@ -281,6 +286,7 @@ class MainForm:
         self.preview.config(yscrollcommand=scrollbar_preview.set)
         scrollbar_preview.config(command=self.preview.yview)
 
+        # Make preview read-only to mouse clicks
         self.preview.bind("<Button-1>", lambda e: "break")
 
         if self.preview_expanded:
@@ -297,12 +303,76 @@ class MainForm:
         self.context_menu.add_command(label="Delete", command=self.context_delete)
 
     def on_close(self):
-        """Gestisce la chiusura della finestra salvando la geometria."""
+        """Handle window close, saving geometry."""
         self.save_geometry()
         self.root.destroy()
 
+    def _on_list_motion(self, event):
+        """Show tooltip with tag preview when hovering over a code."""
+        index = self.code_list.nearest(event.y)
+
+        # Out of bounds → hide tooltip
+        if index < 0 or index >= self.code_list.size():
+            self._hide_list_tooltip()
+            self._list_tooltip_last_index = None
+            return
+
+        # Same row → do nothing
+        if self._list_tooltip_last_index == index:
+            return
+
+        self._list_tooltip_last_index = index
+        code = self.code_list.get(index)
+        tags = self.codes.get(code, [])
+
+        if not tags:
+            self._hide_list_tooltip()
+            return
+
+        # Build preview text
+        lines = [f"{t['key']} = {t['value']}" for t in tags]
+        text = "\n".join(lines)
+
+        # Show tooltip near cursor
+        self._show_list_tooltip(event.x_root + 10, event.y_root + 10, text)
+
+    def _on_list_leave(self, event):
+        """Hide tooltip when leaving the listbox."""
+        self._hide_list_tooltip()
+        self._list_tooltip_last_index = None
+
+    def _show_list_tooltip(self, x, y, text):
+        self._hide_list_tooltip()
+
+        tw = tk.Toplevel(self.code_list)
+        tw.wm_overrideredirect(True)
+        tw.wm_geometry(f"+{x}+{y}")
+        tw.wm_attributes("-topmost", True)  # 🔥 FIX: tooltip always visible
+
+        label = tk.Label(
+            tw,
+            text=text,
+            background="#ffffe0",
+            relief=tk.SOLID,
+            borderwidth=1,
+            justify="left",
+            font=("Arial", 8)
+        )
+        label.pack(ipadx=1, ipady=1)
+
+        self._list_tooltip_window = tw
+
+    def _hide_list_tooltip(self):
+        """Destroy tooltip window if present."""
+        if self._list_tooltip_window is not None:
+            try:
+                self._list_tooltip_window.destroy()
+            except:
+                pass
+        self._list_tooltip_window = None
+
     def _load_icons(self):
-        """Inizializza i simboli del pulsante di espansione/collasso."""
+        """Initialize expand/collapse symbols for the preview toggle button."""
         self.expand_symbol = "▼"
         self.collapse_symbol = "▲"
         self.expand_image = None
@@ -310,16 +380,10 @@ class MainForm:
 
     # ---------------- TOGGLE PREVIEW ----------------
     def toggle_preview(self):
-        print("\n" + "=" * 60)
-        print("TOGGLE PREVIEW →", "APERTURA" if not self.preview_expanded else "CHIUSURA")
-        print("=" * 60)
-
         self.preview_expanded = not self.preview_expanded
         self.toggle_button.config(
             text=self.collapse_symbol if self.preview_expanded else self.expand_symbol
         )
-
-        self._dbg("STATO INIZIALE")
 
         if not self.preview_expanded:
             self._collapse_preview()
@@ -329,119 +393,138 @@ class MainForm:
     def _collapse_preview(self):
         self.root.update_idletasks()
 
+        # Capture current upper pane height once, clamp to minimum
         try:
             self.upper_height = self.paned.sash_coord(0)[1]
         except:
             self.upper_height = self.MIN_UPPER
 
-        self._dbg("DOPO MISURAZIONI COLLASSO")
+        self.upper_height = max(self.upper_height, self.MIN_UPPER)
 
-        w = self.root.winfo_width()
-        new_h = max(self.upper_height, self.MIN_UPPER)
-        self.root.geometry(f"{w}x{new_h}")
-
+        # Remove preview panel
         try:
             self.paned.forget(self.preview_frame)
         except:
             pass
 
-        # 🔥 Blocca altezza pannello superiore
-        self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
+        # Fix upper pane minimum height so it does not shrink
+        try:
+            self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
+        except:
+            pass
 
-        self.root.after_idle(self._finalize_collapse)
+        # Optionally adjust window height to match upper pane
+        w = self.root.winfo_width()
+        self.root.geometry(f"{w}x{self.upper_height}")
 
-    def _finalize_collapse(self):
-        self.root.update_idletasks()
-        self._dbg("FINALE COLLASSO")
         self.save_config()
 
     def _expand_preview(self):
         self.root.update_idletasks()
 
-        try:
-            current_upper = self.paned.sash_coord(0)[1]
-        except:
-            current_upper = self.MIN_UPPER
-
-        upper_h = self.upper_height or current_upper
-        lower_h = self.preview_height or 160
-
-        self._dbg("DOPO LETTURA CONFIG ESPANSIONE")
-
-        w = self.root.winfo_width()
-        new_h = upper_h + lower_h
-        self.root.geometry(f"{w}x{new_h}")
-
-        try:
-            self.paned.add(self.preview_frame, minsize=0)
-        except:
-            pass
-
-        self.root.after_idle(lambda: self._finalize_expand(upper_h))
-
-    def _finalize_expand(self, upper_h):
-        self.root.update_idletasks()
-
-        try:
-            self.paned.sash_place(0, 0, upper_h)
-        except:
-            pass
-
-        # 🔥 Blocca altezza pannello superiore
-        self.paned.paneconfig(self.paned.panes()[0], minsize=upper_h)
-
-        # 🔥 Salva altezza pannello inferiore
-        self.preview_height = max(160, self.preview_frame.winfo_height())
-
-        self._dbg("FINALE ESPANSIONE")
-        self.save_config()
-
-    def _dbg(self, label):
-        self.root.update_idletasks()
-        try:
-            sash = self.paned.sash_coord(0)[1]
-        except:
-            sash = None
-
-        print(f"\n--- {label} ---")
-        print(f"Window height:       {self.root.winfo_height()}")
-        print(f"Paned height:        {self.paned.winfo_height()}")
-        print(f"Upper height (sash): {sash}")
-        print(f"Lower height:        {self.preview_frame.winfo_height()}")
-        print(f"Saved upper_height:  {self.upper_height}")
-        print(f"Saved preview_height:{self.preview_height}")
-        print("-----------------------------")
-
-    def _restore_panes_layout(self):
-        self.root.update_idletasks()
-
-        if not self.preview_expanded:
-            try:
-                self.paned.forget(self.preview_frame)
-            except:
-                pass
-            return
-
-        try:
-            paned_h = self.paned.winfo_height()
-        except:
-            paned_h = 0
-
+        # Fallback if upper_height was never set
         if self.upper_height is None:
             try:
                 self.upper_height = self.paned.sash_coord(0)[1]
             except:
-                self.upper_height = int(paned_h * 0.6) if paned_h > 0 else self.MIN_UPPER
+                self.upper_height = self.MIN_UPPER
 
+        self.upper_height = max(self.upper_height, self.MIN_UPPER)
+        self.preview_height = max(160, self.preview_height)
+
+        # Re-add preview panel if missing
+        if self.preview_frame not in self.paned.panes():
+            try:
+                self.paned.add(self.preview_frame, minsize=0)
+            except:
+                pass
+
+        self.root.update_idletasks()
+
+        # Place sash so upper pane has fixed height
         try:
             self.paned.sash_place(0, 0, self.upper_height)
         except:
             pass
 
-        # 🔥 Impedisci compressione del pannello superiore
-        self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
+        # Fix upper pane minimum height
+        try:
+            self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
+        except:
+            pass
+
+        # Adjust window height to upper + preview
+        w = self.root.winfo_width()
+        total_h = self.upper_height + self.preview_height
+        self.root.geometry(f"{w}x{total_h}")
+
+        # Update preview_height from actual widget height
+        self.root.update_idletasks()
+        try:
+            self.preview_height = max(160, self.preview_frame.winfo_height())
+        except:
+            self.preview_height = 160
+
+        self.save_config()
+
+    def _restore_panes_layout(self):
+        """
+        Restore the split layout after window creation, using saved heights.
+        """
+        self.root.update_idletasks()
+
+        # Ensure minimum upper height
+        if self.upper_height is None:
+            try:
+                self.upper_height = self.paned.sash_coord(0)[1]
+            except:
+                self.upper_height = self.MIN_UPPER
+
+        self.upper_height = max(self.upper_height, self.MIN_UPPER)
+        self.preview_height = max(160, self.preview_height)
+
+        if not self.preview_expanded:
+            # Collapsed: ensure preview is removed and upper pane fixed
+            try:
+                self.paned.forget(self.preview_frame)
+            except:
+                pass
+            try:
+                self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
+            except:
+                pass
+            w = self.root.winfo_width()
+            self.root.geometry(f"{w}x{self.upper_height}")
+            self.save_config()
+            return
+
+        # Expanded: ensure preview is present
+        if self.preview_frame not in self.paned.panes():
+            try:
+                self.paned.add(self.preview_frame, minsize=0)
+            except:
+                pass
 
         self.root.update_idletasks()
+
+        # Place sash and fix upper pane
+        try:
+            self.paned.sash_place(0, 0, self.upper_height)
+        except:
+            pass
+
+        try:
+            self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
+        except:
+            pass
+
+        # Adjust window height to match saved layout
+        w = self.root.winfo_width()
+        total_h = self.upper_height + self.preview_height
+        self.root.geometry(f"{w}x{total_h}")
+
+        self.root.update_idletasks()
+        self.save_config()
 
     # ---------------- CONTEXT MENU ----------------
     def show_context_menu(self, event):
@@ -488,8 +571,10 @@ class MainForm:
 
     # ---------------- FONT ----------------
     def apply_font(self):
-        f = (self.config.get("font_family", "Segoe UI"),
-             int(self.config.get("font_size", 10)))
+        f = (
+            self.config.get("font_family", "Segoe UI"),
+            int(self.config.get("font_size", 10))
+        )
         self.root.option_add("*Font", f)
 
         def apply(widget):
@@ -550,7 +635,7 @@ class MainForm:
         self.filtered_codes = sorted(self.codes)
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
-        self.entry['values'] = self.filtered_codes
+        self.entry["values"] = self.filtered_codes
 
     def filter_codes(self, *args):
         text = self.code_var.get().lower()
@@ -560,7 +645,7 @@ class MainForm:
         )
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
-        self.entry['values'] = self.filtered_codes
+        self.entry["values"] = self.filtered_codes
         self.update_preview()
 
     def focus_list(self, event):
