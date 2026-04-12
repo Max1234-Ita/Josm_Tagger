@@ -5,6 +5,8 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import threading
 import keyboard
+import pystray
+from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
@@ -62,6 +64,11 @@ class MainForm:
         root.title("JOSM Tagger")
         root.attributes("-topmost", True)
 
+        # --- TRAY STATE ---
+        self.tray_icon = None
+        self.tray_thread = None
+        self.tray_running = False
+
         # --- THEME ---
         theme = self.config.get("theme", {})
         self.bg_color = theme.get("bg", "#2b2b2b")
@@ -87,7 +94,8 @@ class MainForm:
         # --- GEOMETRY ---
         self.apply_geometry()
 
-        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        # X → minimizza nella tray
+        self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
 
         # Declared attributes
         self.filtered_codes = []
@@ -182,13 +190,15 @@ class MainForm:
         file_menu = tk.Menu(self.menubar, tearoff=0)
         file_menu.add_command(label="Reload tags", command=self.reload_codes)
         file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.root.quit)
+        file_menu.add_command(label="Exit", command=self._exit_app)
 
         edit_menu = tk.Menu(self.menubar, tearoff=0)
         edit_menu.add_command(label="Tags & Codes", command=self.open_editor)
 
         view_menu = tk.Menu(self.menubar, tearoff=0)
         view_menu.add_command(label="Font", command=self.select_font)
+        view_menu.add_separator()
+        view_menu.add_command(label="Minimize to tray", command=self.minimize_to_tray)
 
         about_menu = tk.Menu(self.menubar, tearoff=0)
         about_menu.add_command(label="About", command=self.show_about)
@@ -339,7 +349,6 @@ class MainForm:
         # Show tooltip near cursor
         self._show_list_tooltip(event.x_root + 10, event.y_root + 10, text)
 
-
     def _on_list_leave(self, event):
         """Hide tooltip when leaving the listbox."""
         self._hide_list_tooltip()
@@ -351,7 +360,7 @@ class MainForm:
         tw = tk.Toplevel(self.code_list)
         tw.wm_overrideredirect(True)
         tw.wm_geometry(f"+{x}+{y}")
-        tw.wm_attributes("-topmost", True)  # 🔥 required because main window is topmost
+        tw.wm_attributes("-topmost", True)  # required because main window is topmost
 
         label = tk.Label(
             tw,
@@ -363,7 +372,7 @@ class MainForm:
             relief="solid",
             borderwidth=1,
             highlightthickness=1,
-            highlightbackground="#aaaaaa"  # 🔥 soft border effect
+            highlightbackground="#aaaaaa"
         )
         label.pack(ipadx=4, ipady=2)
 
@@ -613,6 +622,11 @@ class MainForm:
         self.focus_input()
 
     def focus_input(self):
+        if self.tray_running:
+            # se è in tray, ripristina
+            self._on_tray_restore()
+            return
+
         self.root.deiconify()
         self.root.lift()
         self.root.attributes("-topmost", True)
@@ -720,3 +734,57 @@ class MainForm:
 
     def open_editor(self):
         TagEditorForm(self.root, self.codes)
+
+    # ---------------------------------------------------------
+    # SYSTEM TRAY SUPPORT (pystray)
+    # ---------------------------------------------------------
+    def minimize_to_tray(self):
+        """Hide window and show tray icon."""
+        if self.tray_running:
+            return
+
+        self.save_geometry()
+        self.root.withdraw()
+
+        self.tray_running = True
+        self.tray_thread = threading.Thread(target=self._run_tray_icon_thread, daemon=True)
+        self.tray_thread.start()
+
+    def _run_tray_icon_thread(self):
+        """Run tray icon loop in background thread."""
+        icon_path = resource_path("resources/josm_tagger.ico")
+        image = Image.open(icon_path)
+
+        menu = pystray.Menu(
+            pystray.MenuItem("Restore", self._on_tray_restore),
+            pystray.MenuItem("Exit", self._on_tray_exit)
+        )
+
+        self.tray_icon = pystray.Icon("josm_tagger", image, "JOSM Tagger", menu)
+        self.tray_icon.run()
+
+    def _on_tray_restore(self, icon=None, item=None):
+        """Restore window from tray."""
+        self.tray_running = False
+        if self.tray_icon:
+            self.tray_icon.stop()
+
+        self.root.after(0, self._restore_window)
+
+    def _restore_window(self):
+        self.root.deiconify()
+        self.root.lift()
+        self.root.attributes("-topmost", True)
+        self.root.after(50, lambda: self.root.attributes("-topmost", True))
+        self.focus_input()
+
+    def _on_tray_exit(self, icon=None, item=None):
+        """Exit application from tray."""
+        self.tray_running = False
+        if self.tray_icon:
+            self.tray_icon.stop()
+        self.root.after(0, self._exit_app)
+
+    def _exit_app(self):
+        self.save_geometry()
+        self.root.destroy()
