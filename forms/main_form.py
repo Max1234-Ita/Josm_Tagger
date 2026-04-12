@@ -105,17 +105,22 @@ class MainForm:
         self.expand_image = None
         self.collapse_image = None
 
-        # Stato pannello inferiore
+        # Stato pannelli
         self.preview_expanded = self.config.get("preview_expanded", True)
-        self.preview_expanded_height = self.config.get("preview_expanded_height", 120)
-        self.preview_height = self.config.get("preview_height", 150)
+        # self.preview_height = self.config.get("preview_height", 150)
+        self.preview_height = max(160, self.config.get("preview_height", 150))
+
         self.upper_height = self.config.get("upper_height", None)
 
+        # Costruzione GUI
         self.build_menu()
         self.build_ui()
         self.register_hotkey()
         self.apply_font()
         self.update_list()
+
+        # Ripristino layout pannelli dopo che Tk ha stabilizzato il layout
+        self.root.after_idle(self._restore_panes_layout)
 
     # ---------------------------------------------------------
     # GEOMETRY
@@ -213,14 +218,13 @@ class MainForm:
         self.apply_button = tk.Button(top, text="Apply", command=self.apply_code, width=6)
         self.apply_button.pack(side="right")
 
-        # --- PANED WINDOW (SOLO 2 PANNELLI) ---
+        # --- PANED WINDOW ---
         self.paned = tk.PanedWindow(self.root, orient="vertical", sashrelief="raised")
         self.paned.pack(fill="both", expand=True, padx=6, pady=6)
 
-        # --- PANNELLO SUPERIORE (lista codici + header preview) ---
+        # --- PANNELLO SUPERIORE ---
         upper_frame = tk.Frame(self.paned)
 
-        # LISTA CODICI
         list_frame = tk.Frame(upper_frame)
         list_frame.pack(fill="both", expand=True)
 
@@ -236,7 +240,7 @@ class MainForm:
         self.code_list.bind("<Return>", self.apply_from_list)
         self.code_list.bind("<Button-3>", self.show_context_menu)
 
-        # HEADER PREVIEW (ora sotto la lista codici)
+        # HEADER PREVIEW
         preview_header = tk.Frame(upper_frame, height=28)
         preview_header.pack(fill="x")
         preview_header.pack_propagate(False)
@@ -260,10 +264,11 @@ class MainForm:
 
         Tooltip(self.toggle_button, "Expand/collapse tag preview")
 
-        # AGGIUNTA DEL PANNELLO SUPERIORE AL PANED
-        self.paned.add(upper_frame, minsize=80)
+        # Altezza minima del pannello superiore (fissa)
+        self.MIN_UPPER = 160
+        self.paned.add(upper_frame, minsize=self.MIN_UPPER)
 
-        # --- PANNELLO INFERIORE (preview) ---
+        # --- PANNELLO INFERIORE ---
         self.preview_frame = tk.Frame(self.paned)
 
         preview_inner = tk.Frame(self.preview_frame)
@@ -276,12 +281,13 @@ class MainForm:
         self.preview.config(yscrollcommand=scrollbar_preview.set)
         scrollbar_preview.config(command=self.preview.yview)
 
-        # BLOCCA IL CLICK SULLA LISTA DEI TAG
         self.preview.bind("<Button-1>", lambda e: "break")
 
-        # Altezza iniziale del pannello inferiore
-        minsize_preview = 80 if self.preview_expanded else 0
-        self.paned.add(self.preview_frame, minsize=minsize_preview)
+        if self.preview_expanded:
+            self.paned.add(self.preview_frame, minsize=0)
+        else:
+            self.paned.add(self.preview_frame, minsize=0)
+            self.paned.forget(self.preview_frame)
 
         # --- CONTEXT MENU ---
         self.context_menu = tk.Menu(self.root, tearoff=0)
@@ -304,113 +310,138 @@ class MainForm:
 
     # ---------------- TOGGLE PREVIEW ----------------
     def toggle_preview(self):
-        """
-        Collassa o espande il pannello inferiore seguendo la logica richiesta:
-
-        - In chiusura:
-            * misura upper e lower
-            * salva nel config
-            * imposta la finestra all'altezza del solo pannello superiore
-
-        - In apertura:
-            * misura l'upper attuale
-            * recupera upper e lower dal config
-            * imposta la finestra alla somma
-            * riaggiunge il pannello inferiore
-            * ripristina l'upper salvato
-        """
+        print("\n" + "=" * 60)
+        print("TOGGLE PREVIEW →", "APERTURA" if not self.preview_expanded else "CHIUSURA")
+        print("=" * 60)
 
         self.preview_expanded = not self.preview_expanded
-        print("preview_expanded =", self.preview_expanded)
-
-        # Aggiorna icona
         self.toggle_button.config(
             text=self.collapse_symbol if self.preview_expanded else self.expand_symbol
         )
 
-        self.root.update_idletasks()
-
-        # Misura finestra attuale
-        w = self.root.winfo_width()
-        h = self.root.winfo_height()
+        self._dbg("STATO INIZIALE")
 
         if not self.preview_expanded:
-            # ---------------------------------------------------------
-            # 🔻 COLLASSO
-            # ---------------------------------------------------------
-            self.root.update_idletasks()
+            self._collapse_preview()
+        else:
+            self._expand_preview()
 
-            # 1. Misura altezza pannello superiore
-            try:
-                self.upper_height = self.paned.sash_coord(0)[1]
-            except Exception:
-                self.upper_height = self.paned.winfo_height()
+    def _collapse_preview(self):
+        self.root.update_idletasks()
 
-            # 2. Misura altezza pannello inferiore
-            try:
-                self.preview_height = self.preview_frame.winfo_height()
-            except Exception:
-                self.preview_height = 150
+        try:
+            self.upper_height = self.paned.sash_coord(0)[1]
+        except:
+            self.upper_height = self.MIN_UPPER
 
-            # 3. Imposta la finestra all'altezza del solo pannello superiore
-            # new_h = self.upper_height
-            new_h = h - self.preview_height
-            if new_h < 200:
-                new_h = 200
+        self._dbg("DOPO MISURAZIONI COLLASSO")
 
-            self.root.geometry(f"{w}x{new_h}")
-            self.root.update_idletasks()
+        w = self.root.winfo_width()
+        new_h = max(self.upper_height, self.MIN_UPPER)
+        self.root.geometry(f"{w}x{new_h}")
 
-            # 4. Rimuove il pannello inferiore
+        try:
+            self.paned.forget(self.preview_frame)
+        except:
+            pass
+
+        # 🔥 Blocca altezza pannello superiore
+        self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
+
+        self.root.after_idle(self._finalize_collapse)
+
+    def _finalize_collapse(self):
+        self.root.update_idletasks()
+        self._dbg("FINALE COLLASSO")
+        self.save_config()
+
+    def _expand_preview(self):
+        self.root.update_idletasks()
+
+        try:
+            current_upper = self.paned.sash_coord(0)[1]
+        except:
+            current_upper = self.MIN_UPPER
+
+        upper_h = self.upper_height or current_upper
+        lower_h = self.preview_height or 160
+
+        self._dbg("DOPO LETTURA CONFIG ESPANSIONE")
+
+        w = self.root.winfo_width()
+        new_h = upper_h + lower_h
+        self.root.geometry(f"{w}x{new_h}")
+
+        try:
+            self.paned.add(self.preview_frame, minsize=0)
+        except:
+            pass
+
+        self.root.after_idle(lambda: self._finalize_expand(upper_h))
+
+    def _finalize_expand(self, upper_h):
+        self.root.update_idletasks()
+
+        try:
+            self.paned.sash_place(0, 0, upper_h)
+        except:
+            pass
+
+        # 🔥 Blocca altezza pannello superiore
+        self.paned.paneconfig(self.paned.panes()[0], minsize=upper_h)
+
+        # 🔥 Salva altezza pannello inferiore
+        self.preview_height = max(160, self.preview_frame.winfo_height())
+
+        self._dbg("FINALE ESPANSIONE")
+        self.save_config()
+
+    def _dbg(self, label):
+        self.root.update_idletasks()
+        try:
+            sash = self.paned.sash_coord(0)[1]
+        except:
+            sash = None
+
+        print(f"\n--- {label} ---")
+        print(f"Window height:       {self.root.winfo_height()}")
+        print(f"Paned height:        {self.paned.winfo_height()}")
+        print(f"Upper height (sash): {sash}")
+        print(f"Lower height:        {self.preview_frame.winfo_height()}")
+        print(f"Saved upper_height:  {self.upper_height}")
+        print(f"Saved preview_height:{self.preview_height}")
+        print("-----------------------------")
+
+    def _restore_panes_layout(self):
+        self.root.update_idletasks()
+
+        if not self.preview_expanded:
             try:
                 self.paned.forget(self.preview_frame)
-            except tk.TclError:
+            except:
                 pass
-
-            # 5. Salva tutto
-            self.save_config()
             return
 
-        else:
-            # ---------------------------------------------------------
-            # 🔺 ESPANSIONE
-            # ---------------------------------------------------------
-            self.root.update_idletasks()
+        try:
+            paned_h = self.paned.winfo_height()
+        except:
+            paned_h = 0
 
-            # 1. Misura l'altezza attuale del pannello superiore
+        if self.upper_height is None:
             try:
-                current_upper = self.paned.sash_coord(0)[1]
-            except Exception:
-                current_upper = self.paned.winfo_height()
+                self.upper_height = self.paned.sash_coord(0)[1]
+            except:
+                self.upper_height = int(paned_h * 0.6) if paned_h > 0 else self.MIN_UPPER
 
-            # 2. Recupera dal config le altezze salvate
-            upper_h = self.upper_height if self.upper_height else current_upper
-            lower_h = self.preview_height if self.preview_height else 150
+        try:
+            self.paned.sash_place(0, 0, self.upper_height)
+        except:
+            pass
 
-            # 3. Imposta la finestra alla somma
-            # new_h = upper_h + lower_h
-            new_h = h + lower_h  # Aggiusta altezza attuale con altezza pannello inferiore
-            self.root.geometry(f"{w}x{new_h}")
-            self.root.update_idletasks()
+        # 🔥 Impedisci compressione del pannello superiore
+        self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
 
-            # 4. Riaggiunge il pannello inferiore
-            try:
-                self.paned.add(self.preview_frame, minsize=80)
-            except tk.TclError:
-                pass
-
-            self.root.update_idletasks()
-
-            # 5. Ripristina upper_height tramite sash
-            try:
-                # self.paned.sash_place(0, 0, upper_h)
-                self.paned.sash_place(0, 0, current_upper)
-            except Exception:
-                pass
-
-            # 6. Salva tutto
-            self.save_config()
-            return
+        self.root.update_idletasks()
 
     # ---------------- CONTEXT MENU ----------------
     def show_context_menu(self, event):
