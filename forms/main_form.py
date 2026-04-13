@@ -61,6 +61,8 @@ class MainForm:
         self.config = load_config()
         self.codes = load_codes()
 
+        self._disable_maximize()
+
         root.title("JOSM Tagger")
         root.attributes("-topmost", True)
 
@@ -93,6 +95,7 @@ class MainForm:
 
         # --- GEOMETRY ---
         self.apply_geometry()
+        self.root.bind("<Configure>", self._prevent_maximize)
 
         # X → minimizza nella tray
         self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
@@ -751,7 +754,6 @@ class MainForm:
         self.tray_thread.start()
 
     def _run_tray_icon_thread(self):
-        """Run tray icon loop in background thread."""
         icon_path = resource_path("resources/josm_tagger.ico")
         image = Image.open(icon_path)
 
@@ -760,8 +762,30 @@ class MainForm:
             pystray.MenuItem("Exit", self._on_tray_exit)
         )
 
-        self.tray_icon = pystray.Icon("josm_tagger", image, "JOSM Tagger", menu)
-        self.tray_icon.run()
+        def setup(icon):
+            icon.visible = True
+
+            # ⭐ Windows: abilita click sinistro per restore
+            if sys.platform.startswith("win"):
+                def on_click(icon, event):
+                    # LEFT_CLICK è supportato solo dal backend Win32
+                    if event == pystray.MouseEvent.LEFT_CLICK:
+                        self._on_tray_restore()
+
+                icon.on_click = on_click
+
+            # ⭐ Linux: NON assegnare on_click
+            # AppIndicator/SNI non supportano eventi → evitiamo eccezioni
+
+        self.tray_icon = pystray.Icon(
+            "josm_tagger",
+            image,
+            "JOSM Tagger",
+            menu
+        )
+
+        # ⭐ IMPORTANTE: run con setup
+        self.tray_icon.run(setup=setup)
 
     def _on_tray_restore(self, icon=None, item=None):
         """Restore window from tray."""
@@ -784,6 +808,40 @@ class MainForm:
         if self.tray_icon:
             self.tray_icon.stop()
         self.root.after(0, self._exit_app)
+
+    def _prevent_maximize(self, event):
+        # Se la finestra è massimizzata → ripristina la geometria salvata
+        if self.root.state() == "zoomed":
+            self.root.state("normal")
+            self.apply_geometry()
+
+    def _disable_maximize(self):
+        """
+        Disabilita completamente la massimizzazione della finestra su Windows:
+        - rimuove il pulsante di massimizzazione
+        - blocca il doppio click sulla title-bar
+        - blocca Win+FrecciaSu
+        - evita il flash visivo della finestra che si massimizza per un istante
+        """
+        try:
+            import ctypes
+
+            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+
+            GWL_STYLE = -16
+            WS_MAXIMIZEBOX = 0x00010000
+            WS_THICKFRAME = 0x00040000  # mantiene il resize manuale
+
+            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)
+
+            # Rimuove solo la capacità di massimizzare, NON il resize
+            style &= ~WS_MAXIMIZEBOX
+
+            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+
+        except Exception:
+            # Su Linux o se ctypes non funziona → ignora silenziosamente
+            pass
 
     def _exit_app(self):
         self.save_geometry()
