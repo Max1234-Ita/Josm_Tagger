@@ -3,7 +3,7 @@ from hotkeys import start_hotkeys
 import tkinter as tk
 
 appname = 'JOSM Tagger'
-appversion = '0.1.1'
+appversion = '0.1.2'
 author = 'By Max1234-ITA, 2026'
 appinfo = f'{appname} v.{appversion}\n- {author} -'  # Full text to use in About
 

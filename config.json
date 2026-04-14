@@ -12,10 +12,10 @@
   "about_form_geometry": "300x340+104+104",
   "geometry": {
     "main_form": {
-      "x": 52,
-      "y": 52,
+      "x": 156,
+      "y": 156,
       "w": 256,
-      "h": 163
+      "h": 160
     },
     "list_height": 212
   },
@@ -23,5 +23,5 @@
   "list_frame_height": 196,
   "preview_expanded_height": 674,
   "preview_height": 160,
-  "upper_height": 163
+  "upper_height": 160
 }

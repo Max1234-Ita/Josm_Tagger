@@ -698,7 +698,7 @@ class MainForm:
             return
         code = self.code_list.get(sel[0])
         self.send(code)
-        self._reset_input()
+        # self._reset_input()
 
     def apply_code(self, event=None):
         code = self.code_var.get().strip()
@@ -706,7 +706,7 @@ class MainForm:
         # Caso 1: l'utente ha scritto un codice valido
         if code in self.codes:
             self.send(code)
-            self._reset_input()
+            # self._reset_input()
             return
 
         # Caso 2: l'utente ha selezionato un codice dalla lista
@@ -714,7 +714,7 @@ class MainForm:
         if sel:
             selected = self.code_list.get(sel[0])
             self.send(selected)
-            self._reset_input()
+            # self._reset_input()
             return
 
         # Caso 3: NON applicare nulla → NON ripulire
@@ -728,11 +728,52 @@ class MainForm:
         self._reset_input()
 
     def send(self, code):
-        threading.Thread(
-            target=send_tags,
-            args=(self.codes[code],),
-            daemon=True
-        ).start()
+        self._show_sending_preview(code)
+        self._lock_ui()
+
+        def worker():
+            import pyautogui
+            pyautogui.FAILSAFE = False  # ← disattiva solo nel thread
+
+            try:
+                send_tags(self.codes[code])
+            finally:
+                # anche se send_tags crasha → sblocca UI
+                self.root.after(0, self._unlock_ui)
+                self.root.after(0, self._reset_input)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _show_sending_preview(self, code):
+        """Mostra nella preview i tag che stanno per essere inviati."""
+        self.preview.delete(0, tk.END)
+        for t in self.codes.get(code, []):
+            self.preview.insert(tk.END, f"{t['key']} = {t['value']}")
+
+    def _lock_ui(self):
+        """Blocca completamente il form durante l'invio dei tag."""
+        try:
+            self.root.attributes("-disabled", True)
+        except:
+            pass  # Linux non supporta -disabled
+
+        # Disabilita i widget principali
+        self.entry.configure(state="disabled")
+        self.apply_button.configure(state="disabled")
+        self.code_list.configure(state="disabled")
+        self.preview.configure(state="disabled")
+
+    def _unlock_ui(self):
+        """Sblocca il form dopo l'invio dei tag."""
+        try:
+            self.root.attributes("-disabled", False)
+        except:
+            pass
+
+        self.entry.configure(state="normal")
+        self.apply_button.configure(state="normal")
+        self.code_list.configure(state="normal")
+        self.preview.configure(state="normal")
 
     # ---------------- OTHER ----------------
     def reload_codes(self):
