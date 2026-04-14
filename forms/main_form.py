@@ -98,7 +98,8 @@ class MainForm:
         self.root.bind("<Configure>", self._prevent_maximize)
 
         # X → minimizza nella tray
-        self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
+        # self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
+        self.root.protocol("WM_DELETE_WINDOW", self._exit_app)
 
         # Declared attributes
         self.filtered_codes = []
@@ -701,20 +702,23 @@ class MainForm:
 
     def apply_code(self, event=None):
         code = self.code_var.get().strip()
+
+        # Caso 1: l'utente ha scritto un codice valido
         if code in self.codes:
             self.send(code)
             self._reset_input()
             return
 
+        # Caso 2: l'utente ha selezionato un codice dalla lista
         sel = self.code_list.curselection()
         if sel:
-            self.send(self.code_list.get(sel[0]))
+            selected = self.code_list.get(sel[0])
+            self.send(selected)
             self._reset_input()
             return
 
-        if self.filtered_codes:
-            self.send(self.filtered_codes[0])
-            self._reset_input()
+        # Caso 3: NON applicare nulla → NON ripulire
+        # (prima applicava il primo codice filtrato, ora non lo fa più)
 
     def _reset_input(self):
         self.code_var.set("")
