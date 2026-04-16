@@ -720,6 +720,20 @@ class MainForm:
         # Caso 3: NON applicare nulla → NON ripulire
         # (prima applicava il primo codice filtrato, ora non lo fa più)
 
+    def _promote_code(self, code):
+        """Move the used code to the top of the combobox (MRU list)."""
+        values = list(self.code_list["values"])
+
+        # Remove if already present
+        if code in values:
+            values.remove(code)
+
+        # Insert at the top
+        values.insert(0, code)
+
+        # Update combobox values
+        self.code_list["values"] = values
+
     def _reset_input(self):
         self.code_var.set("")
         self.preview.delete(0, tk.END)
@@ -729,18 +743,19 @@ class MainForm:
 
     def send(self, code):
         self._show_sending_preview(code)
-        self._lock_ui()
 
         def worker():
             import pyautogui
-            pyautogui.FAILSAFE = False  # ← disattiva solo nel thread
+            pyautogui.FAILSAFE = False  # disable only inside this thread
 
             try:
                 send_tags(self.codes[code])
             finally:
-                # anche se send_tags crasha → sblocca UI
-                self.root.after(0, self._unlock_ui)
-                self.root.after(0, self._reset_input)
+                def done():
+                    self._promote_code(code)  # move used code to top
+                    self._reset_input()  # baseline behavior
+
+                self.root.after(0, done)
 
         threading.Thread(target=worker, daemon=True).start()
 

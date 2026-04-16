@@ -376,7 +376,12 @@
             "value": "2"
         }
     ],
-    "bl3": [],
+    "bl3": [
+        {
+            "key": "building:levels",
+            "value": "3"
+        }
+    ],
     "blx": [
         {
             "key": "building:levels",
