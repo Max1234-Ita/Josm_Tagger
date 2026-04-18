@@ -387,5 +387,39 @@
             "key": "building:levels",
             "value": "###"
         }
+    ],
+    "tcpisl": [
+        {
+            "key": "area:highway",
+            "value": "traffic_island"
+        },
+        {
+            "key": "traffic_calming",
+            "value": "painted_island"
+        }
+    ],
+    "tcisl": [
+        {
+            "key": "area:highway",
+            "value": "traffic_island"
+        },
+        {
+            "key": "traffic_calming",
+            "value": "island"
+        },
+        {
+            "key": "surface",
+            "value": "****"
+        }
+    ],
+    "roof": [
+        {
+            "key": "building",
+            "value": "roof"
+        },
+        {
+            "key": "layer",
+            "value": "1"
+        }
     ]
 }

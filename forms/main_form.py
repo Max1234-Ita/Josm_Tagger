@@ -674,18 +674,23 @@ class MainForm:
 
     def filter_codes(self, *args):
         text = self.code_var.get().lower()
-        self.code_list.delete(0, tk.END)
 
-        # alphabetical filtered list for the Listbox
+        # Filter codes alphabetically (Listbox view)
         self.filtered_codes = sorted(
             [c for c in self.codes if c.lower().startswith(text)]
         )
 
+        # Rebuild Listbox
+        self.code_list.delete(0, tk.END)
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
 
-        # DO NOT touch the combobox here
-        self.update_preview()
+        # Update preview with the first visible code
+        if self.filtered_codes:
+            first = self.filtered_codes[0]
+            self._show_sending_preview(first)
+        else:
+            self.preview.delete(0, tk.END)
 
     def focus_list(self, event):
         if self.code_list.size() == 0:
@@ -715,24 +720,24 @@ class MainForm:
         # self._reset_input()
 
     def apply_code(self, event=None):
-        code = self.code_var.get().strip()
+        # Normalize input to lowercase for case-insensitive matching
+        code = self.code_var.get().strip().lower()
 
-        # Caso 1: l'utente ha scritto un codice valido
+        # Case 1: user typed a valid code
         if code in self.codes:
             self.send(code)
-            # self._reset_input()
+            self._reset_input()
             return
 
-        # Caso 2: l'utente ha selezionato un codice dalla lista
+        # Case 2: user selected a code from the list
         sel = self.code_list.curselection()
         if sel:
             selected = self.code_list.get(sel[0])
             self.send(selected)
-            # self._reset_input()
+            self._reset_input()
             return
 
-        # Caso 3: NON applicare nulla → NON ripulire
-        # (prima applicava il primo codice filtrato, ora non lo fa più)
+        # Case 3: invalid code → do nothing
 
     def _promote_code(self, code):
         """Move the used code to the top of the combobox (MRU list)."""
@@ -752,18 +757,64 @@ class MainForm:
         self._reset_input()
 
     def send(self, code):
+        """Send tags to JOSM and warn if generic values are detected."""
         self._show_sending_preview(code)
 
         def worker():
             import pyautogui
             pyautogui.FAILSAFE = False
 
+            raw_tags = self.codes.get(code, {})
+            tags_dict = {}
+
+            # Normalize tags into a dict {key: value}
+            if isinstance(raw_tags, dict):
+                tags_dict = raw_tags
+
+            elif isinstance(raw_tags, list):
+                for item in raw_tags:
+                    # Case: {"key": "...", "value": "..."}
+                    if isinstance(item, dict) and "key" in item and "value" in item:
+                        tags_dict[item["key"]] = item["value"]
+
+                    # Case: ("key", "value") or ["key", "value"]
+                    elif isinstance(item, (list, tuple)) and len(item) == 2:
+                        tags_dict[item[0]] = item[1]
+
+            # Convert dict → list of {"key":..., "value":...}
+            tags_list = [{"key": k, "value": v} for k, v in tags_dict.items()]
+
+            generic_found = False
+
+            # Detect generic values
+            for item in tags_list:
+                v = item["value"]
+                if isinstance(v, str):
+                    stripped = v.strip()
+
+                    if not stripped:
+                        continue
+
+                    if len(set(stripped)) == 1 and not stripped[0].isalnum():
+                        generic_found = True
+
+                    elif all(not ch.isalnum() for ch in stripped):
+                        generic_found = True
+
             try:
-                send_tags(self.codes[code])
+                send_tags(tags_list)
             finally:
                 def done():
-                    self._promote_code(code)  # MRU update
+                    self._promote_code(code)
                     self._reset_input()
+
+                    if generic_found:
+                        from tkinter import messagebox
+                        messagebox.showwarning(
+                            "Warning",
+                            "Tags with generic values were added. "
+                            "Please review the edited element manually before uploading."
+                        )
 
                 self.root.after(0, done)
 

@@ -12,8 +12,8 @@
   "about_form_geometry": "300x340+104+104",
   "geometry": {
     "main_form": {
-      "x": 78,
-      "y": 78,
+      "x": 104,
+      "y": 104,
       "w": 256,
       "h": 320
     },
