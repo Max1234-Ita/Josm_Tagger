@@ -133,8 +133,12 @@ class MainForm:
         self._list_tooltip_window = None
         self._list_tooltip_last_index = None
 
+        # Load initial codes from config.json into the combobox (baseline behavior)
+        self.entry["values"] = list(self.codes.keys())
+
         # Restore panes layout after Tk has stabilized geometry
         self.root.after_idle(self._restore_panes_layout)
+
 
     # ---------------------------------------------------------
     # GEOMETRY
@@ -656,21 +660,31 @@ class MainForm:
 
     # ---------------- CODES LOGIC ----------------
     def update_list(self):
+        """Rebuild the Listbox using alphabetical order, but DO NOT touch the combobox."""
         self.code_list.delete(0, tk.END)
-        self.filtered_codes = sorted(self.codes)
-        for c in self.filtered_codes:
+
+        # Alphabetical list for the Listbox
+        sorted_values = sorted(self.codes)
+
+        for c in sorted_values:
             self.code_list.insert(tk.END, c)
-        self.entry["values"] = self.filtered_codes
+
+        # filtered_codes = alphabetical (OK)
+        self.filtered_codes = sorted_values
 
     def filter_codes(self, *args):
         text = self.code_var.get().lower()
         self.code_list.delete(0, tk.END)
+
+        # alphabetical filtered list for the Listbox
         self.filtered_codes = sorted(
             [c for c in self.codes if c.lower().startswith(text)]
         )
+
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
-        self.entry["values"] = self.filtered_codes
+
+        # DO NOT touch the combobox here
         self.update_preview()
 
     def focus_list(self, event):
@@ -722,17 +736,13 @@ class MainForm:
 
     def _promote_code(self, code):
         """Move the used code to the top of the combobox (MRU list)."""
-        values = list(self.code_list["values"])
+        values = list(self.entry["values"])
 
-        # Remove if already present
         if code in values:
             values.remove(code)
 
-        # Insert at the top
         values.insert(0, code)
-
-        # Update combobox values
-        self.code_list["values"] = values
+        self.entry["values"] = values
 
     def _reset_input(self):
         self.code_var.set("")
@@ -746,14 +756,14 @@ class MainForm:
 
         def worker():
             import pyautogui
-            pyautogui.FAILSAFE = False  # disable only inside this thread
+            pyautogui.FAILSAFE = False
 
             try:
                 send_tags(self.codes[code])
             finally:
                 def done():
-                    self._promote_code(code)  # move used code to top
-                    self._reset_input()  # baseline behavior
+                    self._promote_code(code)  # MRU update
+                    self._reset_input()
 
                 self.root.after(0, done)
 
