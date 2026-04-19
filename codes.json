@@ -421,5 +421,17 @@
             "key": "layer",
             "value": "1"
         }
+    ],
+    "grg": [
+        {
+            "key": "building",
+            "value": "garage"
+        }
+    ],
+    "grgs": [
+        {
+            "key": "building",
+            "value": "garages"
+        }
     ]
 }

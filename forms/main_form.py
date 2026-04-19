@@ -65,6 +65,7 @@ class MainForm:
 
         root.title("JOSM Tagger")
         root.attributes("-topmost", True)
+        root.attributes("-alpha", 1)
 
         # --- TRAY STATE ---
         self.tray_icon = None
@@ -202,6 +203,8 @@ class MainForm:
 
         edit_menu = tk.Menu(self.menubar, tearoff=0)
         edit_menu.add_command(label="Tags & Codes", command=self.open_editor)
+        edit_menu.add_separator()
+        edit_menu.add_command(label="Preferences", command=self.open_preferences)
 
         view_menu = tk.Menu(self.menubar, tearoff=0)
         view_menu.add_command(label="Font", command=self.select_font)
@@ -361,6 +364,15 @@ class MainForm:
         """Hide tooltip when leaving the listbox."""
         self._hide_list_tooltip()
         self._list_tooltip_last_index = None
+
+    def _on_preferences_close(self):
+        """Callback quando la finestra Preferences viene chiusa."""
+        if self._preferences_form is not None:
+            try:
+                self._preferences_form.destroy()
+            except:
+                pass
+            self._preferences_form = None
 
     def _show_list_tooltip(self, x, y, text):
         self._hide_list_tooltip()
@@ -858,6 +870,21 @@ class MainForm:
 
     def open_editor(self):
         TagEditorForm(self.root, self.codes)
+
+    def open_preferences(self):
+        from forms.options_form import OptionsForm
+
+        # Evita doppie aperture
+        if hasattr(self, "_preferences_form") and self._preferences_form is not None:
+            try:
+                self._preferences_form.lift()
+                return
+            except:
+                self._preferences_form = None
+
+        # Crea il form
+        self._preferences_form = OptionsForm(self.root)
+        self._preferences_form.protocol("WM_DELETE_WINDOW", self._on_preferences_close)
 
     # ---------------------------------------------------------
     # SYSTEM TRAY SUPPORT (pystray)
