@@ -128,6 +128,7 @@ class MainForm:
         self.build_ui()
         self.register_hotkey()
         self.apply_font()
+        self.apply_theme()
         self.update_list()
 
         # Tooltip
@@ -605,6 +606,28 @@ class MainForm:
             self.update_list()
             self.preview.delete(0, tk.END)
 
+    # ---------------- THEME ----------------
+    def apply_theme(self):
+        """Applica theme.bg e theme.fg a tutti i widget Tk compatibili."""
+        bg = self.bg_color
+        fg = self.fg_color
+
+        def apply_recursive(widget):
+            # Applica solo ai widget Tk (non ttk)
+            try:
+                widget.configure(bg=bg)
+            except:
+                pass
+            try:
+                widget.configure(fg=fg)
+            except:
+                pass
+
+            for child in widget.winfo_children():
+                apply_recursive(child)
+
+        apply_recursive(self.root)
+
     # ---------------- FONT ----------------
     def apply_font(self):
         f = (
@@ -738,7 +761,7 @@ class MainForm:
         # Case 1: user typed a valid code
         if code in self.codes:
             self.send(code)
-            self._reset_input()
+            # self._reset_input()
             return
 
         # Case 2: user selected a code from the list
@@ -746,7 +769,7 @@ class MainForm:
         if sel:
             selected = self.code_list.get(sel[0])
             self.send(selected)
-            self._reset_input()
+            # self._reset_input()
             return
 
         # Case 3: invalid code → do nothing
@@ -872,18 +895,15 @@ class MainForm:
         TagEditorForm(self.root, self.codes)
 
     def open_preferences(self):
-        from forms.options_form import OptionsForm
-
-        # Evita doppie aperture
-        if hasattr(self, "_preferences_form") and self._preferences_form is not None:
+        if getattr(self, "_preferences_form", None) is not None:
             try:
                 self._preferences_form.lift()
                 return
             except:
                 self._preferences_form = None
 
-        # Crea il form
-        self._preferences_form = OptionsForm(self.root)
+        from forms.options_form import OptionsForm
+        self._preferences_form = OptionsForm(self.root, self.config)
         self._preferences_form.protocol("WM_DELETE_WINDOW", self._on_preferences_close)
 
     # ---------------------------------------------------------
@@ -992,5 +1012,11 @@ class MainForm:
             pass
 
     def _exit_app(self):
-        self.save_geometry()
+        # Ricarica la config aggiornata da OptionsForm
+        try:
+            self.config = load_config()
+        except Exception:
+            pass  # in caso di problemi, almeno non sovrascriviamo
+
+        # save_config(self.config)
         self.root.destroy()

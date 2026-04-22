@@ -9,37 +9,41 @@ from config_manager import load_config, save_config
 
 class OptionsForm(tk.Toplevel):
     """
-    Finestra di opzioni dell'applicazione.
+    Application options window.
 
-    - Nessuna opzione viene applicata o salvata immediatamente.
-    - Tutte le modifiche restano in self.temp_config finché l'utente non preme OK.
-    - Con OK: self.temp_config -> config.json (via save_config).
-    - Con Cancel o [X]: nessuna modifica, nessun salvataggio.
+    - No option is applied or saved immediately.
+    - All changes remain in self.temp_config until the user presses OK.
+    - On OK: self.temp_config -> config.json (via save_config).
+    - On Cancel or [X]: no changes, no save.
     """
 
-    def __init__(self, master=None):
+    def __init__(self, master, config):
         super().__init__(master)
 
-        # --- CONFIGURAZIONE ---
+        # --- CONFIGURATION ---
+        # config is the global config passed by MainForm
+        self.config = config
+
+        # Deep copy → working copy
         self.config_data = load_config()
         self.temp_config = copy.deepcopy(self.config_data)
 
-        # Blocca il ridimensionamento del form
+        # Prevent resizing
         self.resizable(False, False)
 
-        # Assicura la presenza delle nuove chiavi
+        # Ensure new keys exist
         self._ensure_defaults()
 
-        # --- FONT & SCALA ---
+        # --- FONT & SCALE ---
         self.font_family = self.config_data.get("font_family", "Calibri")
         self.font_size = int(self.config_data.get("font_size", 11))
         self.ui_scale = float(self.config_data.get("ui_scale", 1.0))
 
-        # --- FINESTRA ---
+        # --- WINDOW ---
         self.title("Preferences")
         self._configure_window_style()
 
-        # --- VARIABILI TK ---
+        # --- TK VARIABLES ---
         self._init_variables()
         vcmd = (self.register(self._validate_percent), "%P")
         self._percent_validator = vcmd
@@ -47,13 +51,14 @@ class OptionsForm(tk.Toplevel):
         # --- UI ---
         self._build_ui()
 
-        # --- EVENTI CHIUSURA ---
+        # --- CLOSE EVENTS ---
         self.protocol("WM_DELETE_WINDOW", self._on_cancel)
 
-        # Focus iniziale
+        # Initial focus
         self.transient(master)
         self.grab_set()
         self.focus_set()
+
 
     # --------------------------------------------------------------------- #
     #  CONFIG / DEFAULTS
@@ -441,9 +446,11 @@ class OptionsForm(tk.Toplevel):
         behaviour["transparency_active"] = ta
         behaviour["transparency_faded"] = tf
 
-        # Copia temp_config -> config_data e salva
-        self.config_data = copy.deepcopy(self.temp_config)
-        save_config(self.config_data)
+        # 🔥 PATCH: aggiorna la config globale invece di crearne una nuova
+        self.config.update(self.temp_config)
+
+        # 🔥 PATCH: salva la config globale aggiornata
+        save_config(self.config)
 
         self.destroy()
 

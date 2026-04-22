@@ -77,6 +77,7 @@ class TagEditorForm:
 
         self.build_ui()
         self.apply_font()
+        self.apply_theme()
 
         # ---------------- Focus management ----------------
         self.root.update_idletasks()

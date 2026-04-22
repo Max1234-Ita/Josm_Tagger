@@ -5,15 +5,16 @@
   "ui_scale": 1.0,
   "theme": {
     "bg": "#f0f0f0",
-    "fg": "#101010"
+    "fg": "#101010",
+    "picture": null
   },
   "geometry_tag_editor": "833x436+204+247",
   "geometry_font_selector": "363x419+250+293",
   "about_form_geometry": "300x340+104+104",
   "geometry": {
     "main_form": {
-      "x": 26,
-      "y": 26,
+      "x": 208,
+      "y": 208,
       "w": 256,
       "h": 320
     },
@@ -23,5 +24,11 @@
   "list_frame_height": 196,
   "preview_expanded_height": 674,
   "preview_height": 160,
-  "upper_height": 160
+  "upper_height": 160,
+  "behaviour": {
+    "on_focus_loss": "do_nothing",
+    "on_apply": "keep_visible",
+    "transparency_active": 100,
+    "transparency_faded": 35
+  }
 }
