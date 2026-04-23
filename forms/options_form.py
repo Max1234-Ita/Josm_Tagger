@@ -75,6 +75,8 @@ class OptionsForm(tk.Toplevel):
         behaviour.setdefault("on_apply", "keep_visible")
         behaviour.setdefault("transparency_active", 100)
         behaviour.setdefault("transparency_faded", 35)
+        behaviour.setdefault("hide_delay", 150)
+        behaviour.setdefault("fade_delay", 120)
 
     # --------------------------------------------------------------------- #
     #  WINDOW STYLE

@@ -755,13 +755,12 @@ class MainForm:
         # self._reset_input()
 
     def apply_code(self, event=None):
-        # Normalize input to lowercase for case-insensitive matching
+        """Apply code typed or selected from list."""
         code = self.code_var.get().strip().lower()
 
         # Case 1: user typed a valid code
         if code in self.codes:
             self.send(code)
-            # self._reset_input()
             return
 
         # Case 2: user selected a code from the list
@@ -769,8 +768,9 @@ class MainForm:
         if sel:
             selected = self.code_list.get(sel[0])
             self.send(selected)
-            # self._reset_input()
             return
+
+        # Case 3: invalid code → do nothing
 
         # Case 3: invalid code → do nothing
 
@@ -840,9 +840,13 @@ class MainForm:
                 send_tags(tags_list)
             finally:
                 def done():
+                    # 1️⃣ Aggiorna MRU
                     self._promote_code(code)
+
+                    # 2️⃣ Ripulisci textbox
                     self._reset_input()
 
+                    # 3️⃣ Warning se necessario
                     if generic_found:
                         from tkinter import messagebox
                         messagebox.showwarning(
@@ -850,6 +854,14 @@ class MainForm:
                             "Tags with generic values were added. "
                             "Please review the edited element manually before uploading."
                         )
+
+                    # 4️⃣ Applica comportamento on_apply
+                    behaviour = self.config.get("behaviour", {})
+                    mode = behaviour.get("on_apply", "keep_visible")
+                    delay = int(behaviour.get("hide_delay", 150))
+
+                    if mode == "minimize_to_tray":
+                        self.root.after(delay, self.minimize_to_tray)
 
                 self.root.after(0, done)
 
