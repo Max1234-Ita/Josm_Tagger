@@ -10,9 +10,11 @@ from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
+from effects import TransparencyFader
 from josm_interface import send_tags
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
+
 
 
 def resource_path(relative_path):
@@ -101,6 +103,26 @@ class MainForm:
         # X → minimizza nella tray
         # self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
         self.root.protocol("WM_DELETE_WINDOW", self._exit_app)
+
+        # --- WINDOW FADING ---
+        self.fader = TransparencyFader(self.root)
+
+        # Track send() state
+        self._sending_in_progress = False
+
+        # Bind focus events
+        self.root.bind("<FocusIn>", self._on_focus_in)
+        self.root.bind("<FocusOut>", self._on_focus_out)
+
+        # Initial transparency
+        beh = self.config.get("behaviour", {})
+        alpha = beh.get("transparency_active", 100) / 100
+        self.root.attributes("-alpha", alpha)
+
+        # Flag to delay fading during send()
+        self._sending_in_progress = False
+
+        self._sending_in_progress = False # Stato interno per evitare fading durante send()
 
         # Declared attributes
         self.filtered_codes = []
@@ -792,7 +814,8 @@ class MainForm:
         self._reset_input()
 
     def send(self, code):
-        """Send tags to JOSM and warn if generic values are detected."""
+        """Send tags to JOSM and apply post-send behaviours."""
+        self._sending_in_progress = True
         self._show_sending_preview(code)
 
         def worker():
@@ -802,51 +825,34 @@ class MainForm:
             raw_tags = self.codes.get(code, {})
             tags_dict = {}
 
-            # Normalize tags into a dict {key: value}
             if isinstance(raw_tags, dict):
                 tags_dict = raw_tags
-
             elif isinstance(raw_tags, list):
                 for item in raw_tags:
-                    # Case: {"key": "...", "value": "..."}
                     if isinstance(item, dict) and "key" in item and "value" in item:
                         tags_dict[item["key"]] = item["value"]
-
-                    # Case: ("key", "value") or ["key", "value"]
                     elif isinstance(item, (list, tuple)) and len(item) == 2:
                         tags_dict[item[0]] = item[1]
 
-            # Convert dict → list of {"key":..., "value":...}
             tags_list = [{"key": k, "value": v} for k, v in tags_dict.items()]
 
             generic_found = False
-
-            # Detect generic values
             for item in tags_list:
                 v = item["value"]
                 if isinstance(v, str):
                     stripped = v.strip()
-
-                    if not stripped:
-                        continue
-
-                    if len(set(stripped)) == 1 and not stripped[0].isalnum():
+                    if stripped and (len(set(stripped)) == 1 and not stripped[0].isalnum()):
                         generic_found = True
-
-                    elif all(not ch.isalnum() for ch in stripped):
+                    elif stripped and all(not ch.isalnum() for ch in stripped):
                         generic_found = True
 
             try:
                 send_tags(tags_list)
             finally:
                 def done():
-                    # 1️⃣ Aggiorna MRU
                     self._promote_code(code)
-
-                    # 2️⃣ Ripulisci textbox
                     self._reset_input()
 
-                    # 3️⃣ Warning se necessario
                     if generic_found:
                         from tkinter import messagebox
                         messagebox.showwarning(
@@ -855,13 +861,19 @@ class MainForm:
                             "Please review the edited element manually before uploading."
                         )
 
-                    # 4️⃣ Applica comportamento on_apply
-                    behaviour = self.config.get("behaviour", {})
-                    mode = behaviour.get("on_apply", "keep_visible")
-                    delay = int(behaviour.get("hide_delay", 150))
+                    # Allow fading now
+                    self._sending_in_progress = False
+
+                    # Trigger faded transparency after send
+                    self._on_focus_out()
+
+                    # Handle on_apply behaviour
+                    beh = self.config.get("behaviour", {})
+                    mode = beh.get("on_apply", "keep_visible")
+                    hide_delay = int(beh.get("hide_delay", 150))
 
                     if mode == "minimize_to_tray":
-                        self.root.after(delay, self.minimize_to_tray)
+                        self.root.after(hide_delay, self.minimize_to_tray)
 
                 self.root.after(0, done)
 
@@ -922,16 +934,22 @@ class MainForm:
     # SYSTEM TRAY SUPPORT (pystray)
     # ---------------------------------------------------------
     def minimize_to_tray(self):
-        """Hide window and show tray icon."""
-        if self.tray_running:
-            return
+        """Fade out before minimizing to tray."""
+        beh = self.config.get("behaviour", {})
+        duration = beh.get("fade_duration_ms", 300)
 
-        self.save_geometry()
-        self.root.withdraw()
+        # Fade to 0 before hiding
+        self.fader.fade(
+            start_alpha=float(self.root.attributes("-alpha")),
+            end_alpha=0.0,
+            duration_ms=duration
+        )
 
-        self.tray_running = True
-        self.tray_thread = threading.Thread(target=self._run_tray_icon_thread, daemon=True)
-        self.tray_thread.start()
+        def hide():
+            self.root.withdraw()
+            self._create_tray_icon()
+
+        self.root.after(duration, hide)
 
     def _run_tray_icon_thread(self):
         icon_path = resource_path("resources/josm_tagger.ico")
@@ -976,11 +994,22 @@ class MainForm:
         self.root.after(0, self._restore_window)
 
     def _restore_window(self):
+        """Restore window from tray with fade-in effect."""
         self.root.deiconify()
-        self.root.lift()
-        self.root.attributes("-topmost", True)
-        self.root.after(50, lambda: self.root.attributes("-topmost", True))
-        self.focus_input()
+
+        beh = self.config.get("behaviour", {})
+        target = beh.get("transparency_active", 100) / 100
+        duration = beh.get("fade_duration_ms", 300)
+
+        # Start fully transparent
+        self.root.attributes("-alpha", 0.0)
+
+        # Fade in
+        self.fader.fade(
+            start_alpha=0.0,
+            end_alpha=target,
+            duration_ms=duration
+        )
 
     def _on_tray_exit(self, icon=None, item=None):
         """Exit application from tray."""
@@ -988,6 +1017,37 @@ class MainForm:
         if self.tray_icon:
             self.tray_icon.stop()
         self.root.after(0, self._exit_app)
+
+    def _on_focus_in(self, event=None):
+        """Apply active transparency when window gains focus."""
+        beh = self.config.get("behaviour", {})
+        target = beh.get("transparency_active", 100) / 100
+        duration = beh.get("fade_duration_ms", 300)
+
+        self.fader.fade(
+            start_alpha=float(self.root.attributes("-alpha")),
+            end_alpha=target,
+            duration_ms=duration
+        )
+
+    def _on_focus_out(self, event=None):
+        """Apply faded transparency when window loses focus.
+
+        IMPORTANT:
+        If send() is running, fading must wait until send() finishes.
+        """
+        if self._sending_in_progress:
+            return  # delay fading until send() completes
+
+        beh = self.config.get("behaviour", {})
+        target = beh.get("transparency_faded", 35) / 100
+        duration = beh.get("fade_duration_ms", 300)
+
+        self.fader.fade(
+            start_alpha=float(self.root.attributes("-alpha")),
+            end_alpha=target,
+            duration_ms=duration
+        )
 
     def _prevent_maximize(self, event):
         # Se la finestra è massimizzata → ripristina la geometria salvata
