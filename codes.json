@@ -41,12 +41,6 @@
             "value": "yes"
         }
     ],
-    "fland": [
-        {
-            "key": "landuse",
-            "value": "farmland"
-        }
-    ],
     "hf": [
         {
             "key": "highway",
@@ -358,12 +352,6 @@
             "value": "basin"
         }
     ],
-    "fyard": [
-        {
-            "key": "landuse",
-            "value": "farmyard"
-        }
-    ],
     "bp": [
         {
             "key": "building:part",
@@ -432,6 +420,88 @@
         {
             "key": "building",
             "value": "garages"
+        }
+    ],
+    "lighting tower": [
+        {
+            "key": "man_made",
+            "value": "mast"
+        },
+        {
+            "key": "tower_type",
+            "value": "lighting"
+        }
+    ],
+    "mdw": [
+        {
+            "key": "landuse",
+            "value": "meadow"
+        }
+    ],
+    "fl": [
+        {
+            "key": "landuse",
+            "value": "farmland"
+        }
+    ],
+    "fy": [
+        {
+            "key": "landuse",
+            "value": "farmyard"
+        }
+    ],
+    "vy": [
+        {
+            "key": "landuse",
+            "value": "vineyard"
+        }
+    ],
+    "res": [
+        {
+            "key": "landuse",
+            "value": "residential"
+        }
+    ],
+    "bsh": [
+        {
+            "key": "building",
+            "value": "shed"
+        }
+    ],
+    "cr": [
+        {
+            "key": "highway",
+            "value": "crossing"
+        }
+    ],
+    "hcr": [
+        {
+            "key": "highway",
+            "value": "crossing"
+        }
+    ],
+    "lg": [
+        {
+            "key": "landuse",
+            "value": "grass"
+        }
+    ],
+    "swp": [
+        {
+            "key": "leisure",
+            "value": "swimming_pool"
+        }
+    ],
+    "fw": [
+        {
+            "key": "highway",
+            "value": "footway"
+        }
+    ],
+    "noe": [
+        {
+            "key": "noexit",
+            "value": "yes"
         }
     ]
 }
