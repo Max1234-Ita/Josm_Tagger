@@ -5,7 +5,29 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import threading
 import keyboard
+# ---------------------------------------------------------------------------
+# NOTE SU PYSTRAY (IMPORTANTE)
+#
+# PyPI distribuisce solo pystray 0.19.5, che NON supporta correttamente:
+# - detach=True
+# - run_detached()
+# - hotkey globale quando la finestra è nascosta
+#
+# Per ottenere la versione corretta (sviluppo), installare da GitHub:
+#
+#   pip uninstall pystray -y
+#   pip install git+https://github.com/moses-palmer/pystray.git
+#
+# La versione GitHub dichiara ancora "0.19.5", ma include:
+# - run_detached()
+# - fix per Windows
+# - fix per hotkey
+# - fix per fading
+# ---------------------------------------------------------------------------
+
 import pystray
+
+from PIL import Image
 from PIL import Image
 
 from config_manager import load_config, save_config
@@ -934,22 +956,35 @@ class MainForm:
     # SYSTEM TRAY SUPPORT (pystray)
     # ---------------------------------------------------------
     def minimize_to_tray(self):
-        """Fade out before minimizing to tray."""
-        beh = self.config.get("behaviour", {})
-        duration = beh.get("fade_duration_ms", 300)
+        """Nasconde la finestra e avvia la tray usando pystray GitHub."""
+        if self.tray_running:
+            return
 
-        # Fade to 0 before hiding
-        self.fader.fade(
-            start_alpha=float(self.root.attributes("-alpha")),
-            end_alpha=0.0,
-            duration_ms=duration
+        # Disattiviamo il fading SOLO qui (pystray 0.19.5 crasha se alpha cambia)
+        self.root.attributes("-alpha", 1.0)
+        self.root.withdraw()
+
+        self._start_tray_icon()
+
+    def _start_tray_icon(self):
+        """Crea la tray icon usando run_detached() della versione GitHub."""
+        if self.tray_running:
+            return
+
+        icon_image = Image.open(resource_path("resources/josm_tagger.ico"))
+
+        self.tray_icon = pystray.Icon(
+            "josm_tagger",
+            icon_image,
+            "JOSM Tagger",
+            menu=pystray.Menu(
+                pystray.MenuItem("Mostra", self._on_tray_restore),
+                pystray.MenuItem("Esci", self._on_tray_exit)
+            )
         )
 
-        def hide():
-            self.root.withdraw()
-            self._create_tray_icon()
-
-        self.root.after(duration, hide)
+        self.tray_running = True
+        self.tray_icon.run_detached()
 
     def _run_tray_icon_thread(self):
         icon_path = resource_path("resources/josm_tagger.ico")
@@ -986,37 +1021,65 @@ class MainForm:
         self.tray_icon.run(setup=setup)
 
     def _on_tray_restore(self, icon=None, item=None):
-        """Restore window from tray."""
-        self.tray_running = False
-        if self.tray_icon:
+        """Ripristina la finestra e rimuove la tray."""
+        try:
             self.tray_icon.stop()
+        except:
+            pass
 
-        self.root.after(0, self._restore_window)
+        self.tray_running = False
+
+        self.root.deiconify()
+        self.root.lift()
+        self.root.attributes("-topmost", True)
+        self.root.after(50, lambda: self.root.attributes("-topmost", False))
+
+        # Fade-in sicuro
+        try:
+            for alpha in range(0, 101, 10):
+                self.root.attributes("-alpha", alpha / 100)
+                self.root.update_idletasks()
+                self.root.after(10)
+        except:
+            self.root.attributes("-alpha", 1)
+
+        # Focus ritardato e forzato sulla textbox
+        self.root.after(80, self._force_focus_on_entry)
+
+    def _force_focus_on_entry(self):
+        """Forza il focus sulla textbox dopo il restore."""
+        try:
+            self.entry.focus_force()
+            self.entry.icursor("end")
+        except:
+            pass
 
     def _restore_window(self):
-        """Restore window from tray with fade-in effect."""
+        """Ripristina la finestra con fade-in."""
+        try:
+            self.tray_icon.stop()
+        except:
+            pass
+
+        self.tray_running = False
         self.root.deiconify()
+        self.root.lift()
 
-        beh = self.config.get("behaviour", {})
-        target = beh.get("transparency_active", 100) / 100
-        duration = beh.get("fade_duration_ms", 300)
-
-        # Start fully transparent
-        self.root.attributes("-alpha", 0.0)
-
-        # Fade in
-        self.fader.fade(
-            start_alpha=0.0,
-            end_alpha=target,
-            duration_ms=duration
-        )
+        # Fade-in sicuro
+        for alpha in range(0, 101, 10):
+            self.root.attributes("-alpha", alpha / 100)
+            self.root.update_idletasks()
+            self.root.after(10)
 
     def _on_tray_exit(self, icon=None, item=None):
-        """Exit application from tray."""
-        self.tray_running = False
-        if self.tray_icon:
+        """Esce dall'applicazione dalla tray."""
+        try:
             self.tray_icon.stop()
-        self.root.after(0, self._exit_app)
+        except:
+            pass
+
+        self.tray_running = False
+        self._exit_app()
 
     def _on_focus_in(self, event=None):
         """Apply active transparency when window gains focus."""
