@@ -35,7 +35,7 @@ def send_tags(pairs):
     time.sleep(0.2)
 
     for i, p in enumerate(pairs):
-
+        print(f"Sending pair: {p['key']}={p['value']}")
         pyautogui.hotkey("ctrl", "a")
         pyautogui.press("delete")
 
@@ -54,3 +54,5 @@ def send_tags(pairs):
             pyautogui.hotkey("shift", "enter")
         else:
             pyautogui.press("enter")
+
+    pass

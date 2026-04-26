@@ -127,7 +127,15 @@ class MainForm:
         self.root.protocol("WM_DELETE_WINDOW", self._exit_app)
 
         # --- WINDOW FADING ---
-        self.fader = TransparencyFader(self.root)
+        # Semafori per controllare quando è permesso reagire al focus-out e quando no.
+        self.allow_minimize = True
+        self.allow_fade = True
+        self._fade_in_progress = False
+        self.allow_focus_out = False
+        self.root.after(500, lambda: setattr(self, "allow_focus_out", True))
+
+        # self.fader = TransparencyFader(self.root)
+        self.fader = TransparencyFader(self)
 
         # Track send() state
         self._sending_in_progress = False
@@ -143,8 +151,7 @@ class MainForm:
 
         # Flag to delay fading during send()
         self._sending_in_progress = False
-
-        self._sending_in_progress = False # Stato interno per evitare fading durante send()
+        self._block_focus_out = False
 
         # Declared attributes
         self.filtered_codes = []
@@ -184,7 +191,6 @@ class MainForm:
 
         # Restore panes layout after Tk has stabilized geometry
         self.root.after_idle(self._restore_panes_layout)
-
 
     # ---------------------------------------------------------
     # GEOMETRY
@@ -411,13 +417,7 @@ class MainForm:
         self._list_tooltip_last_index = None
 
     def _on_preferences_close(self):
-        """Callback quando la finestra Preferences viene chiusa."""
-        if self._preferences_form is not None:
-            try:
-                self._preferences_form.destroy()
-            except:
-                pass
-            self._preferences_form = None
+        self._preferences_form = None
 
     def _show_list_tooltip(self, x, y, text):
         self._hide_list_tooltip()
@@ -767,7 +767,7 @@ class MainForm:
         # Update preview with the first visible code
         if self.filtered_codes:
             first = self.filtered_codes[0]
-            self._show_sending_preview(first)
+            self._render_preview(first)
         else:
             self.preview.delete(0, tk.END)
 
@@ -782,41 +782,45 @@ class MainForm:
         sel = self.code_list.curselection()
         if not sel:
             return
-
         code = self.code_list.get(sel[0])
-
-        self.preview.delete(0, tk.END)
-        for t in self.codes.get(code, []):
-            self.preview.insert(tk.END, f"{t['key']} = {t['value']}")
+        self._render_preview(code)
 
     # ---------------- APPLY ----------------
     def apply_from_list(self, event=None):
+        self.allow_minimize = False
+        self.allow_fade = False
+
         sel = self.code_list.curselection()
         if not sel:
+            self.allow_minimize = True
+            self.allow_fade = True
             return
+
         code = self.code_list.get(sel[0])
         self.send(code)
-        # self._reset_input()
 
     def apply_code(self, event=None):
-        """Apply code typed or selected from list."""
-        code = self.code_var.get().strip().lower()
+        """Apply the typed code or the selected one."""
+        self.allow_minimize = False  # blocca minimize durante l'invio
+        self.allow_fade = False  # blocca fade durante l'invio
 
-        # Case 1: user typed a valid code
-        if code in self.codes:
+        typed = self.code_var.get().strip().lower()
+
+        # Case 1: typed valid code
+        if typed in self.codes:
+            self.send(typed)
+            return
+
+        # Case 2: selected code from list
+        sel = self.code_list.curselection()
+        if sel:
+            code = self.code_list.get(sel[0])
             self.send(code)
             return
 
-        # Case 2: user selected a code from the list
-        sel = self.code_list.curselection()
-        if sel:
-            selected = self.code_list.get(sel[0])
-            self.send(selected)
-            return
-
-        # Case 3: invalid code → do nothing
-
-        # Case 3: invalid code → do nothing
+        # Case 3: invalid → ripristina i flag
+        self.allow_minimize = True
+        self.allow_fade = True
 
     def _promote_code(self, code):
         """Move the used code to the top of the combobox (MRU list)."""
@@ -836,14 +840,14 @@ class MainForm:
         self._reset_input()
 
     def send(self, code):
-        """Send tags to JOSM and apply post-send behaviours."""
         self._sending_in_progress = True
-        self._show_sending_preview(code)
+        self._render_preview(code)
 
         def worker():
             import pyautogui
             pyautogui.FAILSAFE = False
 
+            # --- Normalize tags into a dict ---
             raw_tags = self.codes.get(code, {})
             tags_dict = {}
 
@@ -856,8 +860,10 @@ class MainForm:
                     elif isinstance(item, (list, tuple)) and len(item) == 2:
                         tags_dict[item[0]] = item[1]
 
+            # Convert to list of dicts
             tags_list = [{"key": k, "value": v} for k, v in tags_dict.items()]
 
+            # --- Detect generic values ---
             generic_found = False
             for item in tags_list:
                 v = item["value"]
@@ -868,9 +874,20 @@ class MainForm:
                     elif stripped and all(not ch.isalnum() for ch in stripped):
                         generic_found = True
 
+            # --- Send tags ---
             try:
+                if not tags_list:
+                    print("WARNING: tags_list vuota, niente da inviare")
+                    self._sending_in_progress = False
+                    self.allow_minimize = True
+                    self.allow_fade = True
+                    return
+
                 send_tags(tags_list)
+
             finally:
+
+                # QUI: done() vede generic_found e tags_list perché è nello stesso scope
                 def done():
                     self._promote_code(code)
                     self._reset_input()
@@ -883,54 +900,27 @@ class MainForm:
                             "Please review the edited element manually before uploading."
                         )
 
-                    # Allow fading now
                     self._sending_in_progress = False
+                    self.allow_minimize = True
+                    self.allow_fade = True
 
-                    # Trigger faded transparency after send
-                    self._on_focus_out()
-
-                    # Handle on_apply behaviour
+                    # Minimizza SOLO dopo che send ha finito
                     beh = self.config.get("behaviour", {})
-                    mode = beh.get("on_apply", "keep_visible")
-                    hide_delay = int(beh.get("hide_delay", 150))
-
-                    if mode == "minimize_to_tray":
+                    if beh.get("on_apply") == "minimize_to_tray":
+                        hide_delay = int(beh.get("hide_delay", 150))
                         self.root.after(hide_delay, self.minimize_to_tray)
 
                 self.root.after(0, done)
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _show_sending_preview(self, code):
-        """Mostra nella preview i tag che stanno per essere inviati."""
+    def _render_preview(self, code):
+        """Renderizza la preview dei tag per un dato codice."""
         self.preview.delete(0, tk.END)
-        for t in self.codes.get(code, []):
+
+        tags = self.codes.get(code, [])
+        for t in tags:
             self.preview.insert(tk.END, f"{t['key']} = {t['value']}")
-
-    def _lock_ui(self):
-        """Blocca completamente il form durante l'invio dei tag."""
-        try:
-            self.root.attributes("-disabled", True)
-        except:
-            pass  # Linux non supporta -disabled
-
-        # Disabilita i widget principali
-        self.entry.configure(state="disabled")
-        self.apply_button.configure(state="disabled")
-        self.code_list.configure(state="disabled")
-        self.preview.configure(state="disabled")
-
-    def _unlock_ui(self):
-        """Sblocca il form dopo l'invio dei tag."""
-        try:
-            self.root.attributes("-disabled", False)
-        except:
-            pass
-
-        self.entry.configure(state="normal")
-        self.apply_button.configure(state="normal")
-        self.code_list.configure(state="normal")
-        self.preview.configure(state="normal")
 
     # ---------------- OTHER ----------------
     def reload_codes(self):
@@ -956,11 +946,11 @@ class MainForm:
     # SYSTEM TRAY SUPPORT (pystray)
     # ---------------------------------------------------------
     def minimize_to_tray(self):
-        """Nasconde la finestra e avvia la tray usando pystray GitHub."""
+        """Nasconde la finestra e avvia la tray usando pystray."""
         if self.tray_running:
             return
 
-        # Disattiviamo il fading SOLO qui (pystray 0.19.5 crasha se alpha cambia)
+        # Disattiviamo il fading SOLO qui (pystray crasha se alpha cambia)
         self.root.attributes("-alpha", 1.0)
         self.root.withdraw()
 
@@ -986,42 +976,7 @@ class MainForm:
         self.tray_running = True
         self.tray_icon.run_detached()
 
-    def _run_tray_icon_thread(self):
-        icon_path = resource_path("resources/josm_tagger.ico")
-        image = Image.open(icon_path)
-
-        menu = pystray.Menu(
-            pystray.MenuItem("Restore", self._on_tray_restore),
-            pystray.MenuItem("Exit", self._on_tray_exit)
-        )
-
-        def setup(icon):
-            icon.visible = True
-
-            # ⭐ Windows: abilita click sinistro per restore
-            if sys.platform.startswith("win"):
-                def on_click(icon, event):
-                    # LEFT_CLICK è supportato solo dal backend Win32
-                    if event == pystray.MouseEvent.LEFT_CLICK:
-                        self._on_tray_restore()
-
-                icon.on_click = on_click
-
-            # ⭐ Linux: NON assegnare on_click
-            # AppIndicator/SNI non supportano eventi → evitiamo eccezioni
-
-        self.tray_icon = pystray.Icon(
-            "josm_tagger",
-            image,
-            "JOSM Tagger",
-            menu
-        )
-
-        # ⭐ IMPORTANTE: run con setup
-        self.tray_icon.run(setup=setup)
-
     def _on_tray_restore(self, icon=None, item=None):
-        """Ripristina la finestra e rimuove la tray."""
         try:
             self.tray_icon.stop()
         except:
@@ -1029,12 +984,15 @@ class MainForm:
 
         self.tray_running = False
 
+        # Blocca focus-out durante tutto il restore
+        self._block_focus_out = True
+
         self.root.deiconify()
         self.root.lift()
         self.root.attributes("-topmost", True)
         self.root.after(50, lambda: self.root.attributes("-topmost", False))
 
-        # Fade-in sicuro
+        # Fade-in
         try:
             for alpha in range(0, 101, 10):
                 self.root.attributes("-alpha", alpha / 100)
@@ -1043,8 +1001,16 @@ class MainForm:
         except:
             self.root.attributes("-alpha", 1)
 
-        # Focus ritardato e forzato sulla textbox
-        self.root.after(80, self._force_focus_on_entry)
+        # Forza focus DOPO il fade-in
+        self.root.after(200, self._force_focus_on_entry)
+
+        # Sblocca focus-out quando la finestra è stabile
+        self.root.after(500, lambda: setattr(self, "_block_focus_out", False))
+
+    def _on_tray_exit(self, icon, item):
+        icon.visible = False
+        icon.stop()
+        self.root.quit()
 
     def _force_focus_on_entry(self):
         """Forza il focus sulla textbox dopo il restore."""
@@ -1054,35 +1020,26 @@ class MainForm:
         except:
             pass
 
-    def _restore_window(self):
-        """Ripristina la finestra con fade-in."""
-        try:
-            self.tray_icon.stop()
-        except:
-            pass
+    def _on_focus_in(self, event=None):
 
-        self.tray_running = False
-        self.root.deiconify()
-        self.root.lift()
+        # se un fade-out è in corso, NON interrompere
+        if self._fade_in_progress:
+            return
 
-        # Fade-in sicuro
-        for alpha in range(0, 101, 10):
-            self.root.attributes("-alpha", alpha / 100)
-            self.root.update_idletasks()
-            self.root.after(10)
+        beh = self.config.get("behaviour", {})
+        target = beh.get("transparency_active", 100) / 100
+        duration = int(beh.get("fade_duration_ms", 300))
 
-    def _on_tray_exit(self, icon=None, item=None):
-        """Esce dall'applicazione dalla tray."""
-        try:
-            self.tray_icon.stop()
-        except:
-            pass
-
-        self.tray_running = False
-        self._exit_app()
+        self.fader.fade(
+            start_alpha=float(self.root.attributes("-alpha")),
+            end_alpha=target,
+            duration_ms=duration
+        )
 
     def _on_focus_in(self, event=None):
         """Apply active transparency when window gains focus."""
+        print("FOCUS IN TRIGGERED")
+
         beh = self.config.get("behaviour", {})
         target = beh.get("transparency_active", 100) / 100
         duration = beh.get("fade_duration_ms", 300)
@@ -1094,17 +1051,30 @@ class MainForm:
         )
 
     def _on_focus_out(self, event=None):
-        """Apply faded transparency when window loses focus.
 
-        IMPORTANT:
-        If send() is running, fading must wait until send() finishes.
-        """
+        # blocca durante avvio
+        if not self.allow_focus_out:
+            return
+
+        # blocca durante invio
         if self._sending_in_progress:
-            return  # delay fading until send() completes
+            return
+
+        # blocca se un fade è già in corso
+        if self._fade_in_progress:
+            return
+
+        # se il focus è ancora dentro la finestra, non è perdita reale
+        w = self.root.focus_get()
+        if w is not None and str(w).startswith(str(self.root)):
+            return
+
+        # avvia fade-out
+        self._fade_in_progress = True
 
         beh = self.config.get("behaviour", {})
         target = beh.get("transparency_faded", 35) / 100
-        duration = beh.get("fade_duration_ms", 300)
+        duration = int(beh.get("fade_duration_ms", 300))
 
         self.fader.fade(
             start_alpha=float(self.root.attributes("-alpha")),
