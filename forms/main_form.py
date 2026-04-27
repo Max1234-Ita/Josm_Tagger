@@ -848,6 +848,8 @@ class MainForm:
             import pyautogui
             pyautogui.FAILSAFE = False
 
+            print('Send Worker started')
+
             # --- Normalize tags into a dict ---
             raw_tags = self.codes.get(code, {})
             tags_dict = {}
@@ -909,12 +911,14 @@ class MainForm:
                     beh = self.config.get("behaviour", {})
                     if beh.get("on_apply") == "minimize_to_tray":
                         hide_delay = int(beh.get("hide_delay", 150))
+                        self.root.after(hide_delay, self._on_focus_out())
                         self.root.after(hide_delay, self.minimize_to_tray)
 
                 self.root.after(0, done)
 
         print(f"Applying code '{code}'")
         threading.Thread(target=worker, daemon=True).start()
+        pass
 
     def _render_preview(self, code):
         """Renderizza la preview dei tag per un dato codice."""
@@ -1022,25 +1026,25 @@ class MainForm:
         except:
             pass
 
-    def _on_focus_in(self, event=None):
-
-        # se un fade-out è in corso, NON interrompere
-        if self._fade_in_progress:
-            return
-
-        beh = self.config.get("behaviour", {})
-        target = beh.get("transparency_active", 100) / 100
-        duration = int(beh.get("fade_duration_ms", 300))
-
-        self.fader.fade(
-            start_alpha=float(self.root.attributes("-alpha")),
-            end_alpha=target,
-            duration_ms=duration
-        )
+    # def _on_focus_in(self, event=None):
+    #
+    #     # se un fade-out è in corso, NON interrompere
+    #     if self._fade_in_progress:
+    #         return
+    #
+    #     beh = self.config.get("behaviour", {})
+    #     target = beh.get("transparency_active", 100) / 100
+    #     duration = int(beh.get("fade_duration_ms", 300))
+    #
+    #     self.fader.fade(
+    #         start_alpha=float(self.root.attributes("-alpha")),
+    #         end_alpha=target,
+    #         duration_ms=duration
+    #     )
 
     def _on_focus_in(self, event=None):
         """Apply active transparency when window gains focus."""
-        print("FOCUS IN TRIGGERED")
+        print(f"FOCUS IN TRIGGERED. Event: '{event}")
 
         beh = self.config.get("behaviour", {})
         target = beh.get("transparency_active", 100) / 100
@@ -1053,19 +1057,20 @@ class MainForm:
         )
 
     def _on_focus_out(self, event=None):
-        print("FOCUS OUT TRIGGERED")
+        print(f"FOCUS OUT TRIGGERED. Event: '{event}")
 
-        # blocca durante avvio
-        if not self.allow_focus_out:
-            return
+        # # blocca durante avvio
+        # if not self.allow_focus_out:
+        #     return
 
         # blocca durante invio
-        if self._sending_in_progress:
+        if self._sending_in_progress or self._fade_in_progress or not self.allow_focus_out:
+            print('Focus Out prevented')
             return
 
-        # blocca se un fade è già in corso
-        if self._fade_in_progress:
-            return
+        # # blocca se un fade è già in corso
+        # if self._fade_in_progress:
+        #     return
 
         # se il focus è ancora dentro la finestra, non è perdita reale
         w = self.root.focus_get()
@@ -1075,12 +1080,12 @@ class MainForm:
         # avvia fade-out
         self._fade_in_progress = True
 
+        start_alpha = float(self.root.attributes("-alpha"))
         beh = self.config.get("behaviour", {})
         target = beh.get("transparency_faded", 35) / 100
         duration = int(beh.get("fade_duration_ms", 300))
-
         self.fader.fade(
-            start_alpha=float(self.root.attributes("-alpha")),
+            start_alpha=start_alpha,
             end_alpha=target,
             duration_ms=duration
         )
