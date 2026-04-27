@@ -932,8 +932,7 @@ class MainForm:
                     beh = self.config.get("behaviour", {})
                     if beh.get("on_apply") == "minimize_to_tray":
                         hide_delay = int(beh.get("hide_delay", 150))
-                        self.root.after(hide_delay, self._on_focus_out())
-                        self.root.after(hide_delay, self.minimize_to_tray)
+                        self.root.after(hide_delay, self._fade_then_minimize_to_tray)
 
                 self.root.after(0, done)
 
@@ -982,6 +981,27 @@ class MainForm:
         self.root.withdraw()
 
         self._start_tray_icon()
+
+    def _fade_then_minimize_to_tray(self):
+        """Esegue prima il fade-out e solo dopo nasconde la finestra nella tray."""
+        if self.tray_running:
+            return
+
+        self._block_focus_out = True
+
+        beh = self.config.get("behaviour", {})
+        duration = int(beh.get("fade_duration_ms", 300))
+        target = beh.get("transparency_faded", 35) / 100
+        current_alpha = float(self.root.attributes("-alpha"))
+
+        if current_alpha > target + 0.01:
+            self.fader.fade(
+                start_alpha=current_alpha,
+                end_alpha=target,
+                duration_ms=duration
+            )
+
+        self.root.after(duration, self.minimize_to_tray)
 
     def _start_tray_icon(self):
         """Crea la tray icon usando run_detached() della versione GitHub."""
@@ -1068,6 +1088,10 @@ class MainForm:
 
         now = time.time()
 
+        if self._fade_in_progress:
+            print("Focus In prevented (fade running)")
+            return
+
         # Debounce: ignora eventi troppo ravvicinati (< 80 ms)
         if hasattr(self, "_last_focus_in") and (now - self._last_focus_in) < 0.08:
             print("Focus In prevented (debounced)")
@@ -1132,6 +1156,10 @@ class MainForm:
 
         now = time.time()
 
+        if self._fade_in_progress:
+            print("Focus Out prevented (fade running)")
+            return
+
         # Debounce: ignora eventi troppo ravvicinati (< 80 ms)
         if hasattr(self, "_last_focus_out") and (now - self._last_focus_out) < 0.08:
             print("Focus Out prevented (debounced)")
@@ -1144,9 +1172,17 @@ class MainForm:
             print("Focus Out prevented (startup)")
             return
 
+        if self._block_focus_out:
+            print("Focus Out prevented (blocked)")
+            return
+
         # 2) Blocco durante invio tag
         if self._sending_in_progress:
             print("Focus Out prevented (sending)")
+            return
+
+        if not self.allow_fade:
+            print("Focus Out prevented (fade disabled)")
             return
 
         # 3) Se il focus è ancora dentro la finestra → NON è un vero FocusOut
