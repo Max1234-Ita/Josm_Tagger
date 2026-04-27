@@ -1,6 +1,7 @@
 import os
 import sys
 import json
+import time
 import tkinter as tk
 import tkinter.ttk as ttk
 import threading
@@ -133,6 +134,7 @@ class MainForm:
         self._fade_in_progress = False
         self.allow_focus_out = False
         self.root.after(500, lambda: setattr(self, "allow_focus_out", True))
+        self._is_faded = False
 
         # self.fader = TransparencyFader(self.root)
         self.fader = TransparencyFader(self)
@@ -140,9 +142,28 @@ class MainForm:
         # Track send() state
         self._sending_in_progress = False
 
-        # Bind focus events
-        self.root.bind("<FocusIn>", self._on_focus_in)
-        self.root.bind("<FocusOut>", self._on_focus_out)
+        # # Bind focus events
+        # self.root.bind("<FocusIn>", self._on_focus_in)
+        # self.root.bind("<FocusOut>", self._on_focus_out)
+
+        # --- ISOLATE FOCUS EVENTS (fix doppio FocusIn/Out) ---
+        # Rimuove i binding di classe Toplevel e 'all' per FocusIn/Out
+        tags = list(self.root.bindtags())
+        # tags tipici: ('.!toplevel', 'Toplevel', 'all')
+
+        # Creiamo un gruppo dedicato SOLO ai nostri eventi
+        if "FocusGroup" not in tags:
+            tags.insert(1, "FocusGroup")  # subito dopo il widget stesso
+
+        # Rimuoviamo Toplevel per evitare doppi eventi
+        if "Toplevel" in tags:
+            tags.remove("Toplevel")
+
+        self.root.bindtags(tuple(tags))
+
+        # Assicuriamo che SOLO FocusGroup riceva gli eventi
+        self.root.bind_class("FocusGroup", "<FocusIn>", self._on_focus_in)
+        self.root.bind_class("FocusGroup", "<FocusOut>", self._on_focus_out)
 
         # Initial transparency
         beh = self.config.get("behaviour", {})
@@ -1043,49 +1064,112 @@ class MainForm:
     #     )
 
     def _on_focus_in(self, event=None):
-        """Apply active transparency when window gains focus."""
-        print(f"FOCUS IN TRIGGERED. Event: '{event}")
+        """Fade-in solo quando necessario, con debounce."""
+
+        now = time.time()
+
+        # Debounce: ignora eventi troppo ravvicinati (< 80 ms)
+        if hasattr(self, "_last_focus_in") and (now - self._last_focus_in) < 0.08:
+            print("Focus In prevented (debounced)")
+            return
+
+        self._last_focus_in = now
 
         beh = self.config.get("behaviour", {})
         target = beh.get("transparency_active", 100) / 100
-        duration = beh.get("fade_duration_ms", 300)
+        current_alpha = float(self.root.attributes("-alpha"))
+        duration = int(beh.get("fade_duration_ms", 300))
+
+        # Se siamo già praticamente al target, non rifare il fade
+        if abs(current_alpha - target) < 0.01:
+            print("Fading", current_alpha, "->", target, "in", duration, "ms\n -> (skipped)")
+            return
+
+        print(f"Fading {current_alpha} -> {target} in {duration} ms")
 
         self.fader.fade(
-            start_alpha=float(self.root.attributes("-alpha")),
+            start_alpha=current_alpha,
             end_alpha=target,
             duration_ms=duration
         )
 
+    # def _on_focus_out(self, event=None):
+    #     print(f"FOCUS OUT TRIGGERED. Event: '{event}")
+    #
+    #     # # blocca durante avvio
+    #     # if not self.allow_focus_out:
+    #     #     return
+    #
+    #     # blocca durante invio
+    #     if self._sending_in_progress or self._fade_in_progress or not self.allow_focus_out:
+    #         print('Focus Out prevented')
+    #         return
+    #
+    #     # # blocca se un fade è già in corso
+    #     # if self._fade_in_progress:
+    #     #     return
+    #
+    #     # se il focus è ancora dentro la finestra, non è perdita reale
+    #     w = self.root.focus_get()
+    #     if w is not None and str(w).startswith(str(self.root)):
+    #         return
+    #
+    #     # avvia fade-out
+    #     self._fade_in_progress = True
+    #
+    #     start_alpha = float(self.root.attributes("-alpha"))
+    #     beh = self.config.get("behaviour", {})
+    #     target = beh.get("transparency_faded", 35) / 100
+    #     duration = int(beh.get("fade_duration_ms", 300))
+    #     self.fader.fade(
+    #         start_alpha=start_alpha,
+    #         end_alpha=target,
+    #         duration_ms=duration
+    #     )
+
     def _on_focus_out(self, event=None):
-        print(f"FOCUS OUT TRIGGERED. Event: '{event}")
+        """Fade-out solo quando il focus esce DAVVERO dalla finestra, con debounce."""
 
-        # # blocca durante avvio
-        # if not self.allow_focus_out:
-        #     return
+        now = time.time()
 
-        # blocca durante invio
-        if self._sending_in_progress or self._fade_in_progress or not self.allow_focus_out:
-            print('Focus Out prevented')
+        # Debounce: ignora eventi troppo ravvicinati (< 80 ms)
+        if hasattr(self, "_last_focus_out") and (now - self._last_focus_out) < 0.08:
+            print("Focus Out prevented (debounced)")
             return
 
-        # # blocca se un fade è già in corso
-        # if self._fade_in_progress:
-        #     return
+        self._last_focus_out = now
 
-        # se il focus è ancora dentro la finestra, non è perdita reale
-        w = self.root.focus_get()
-        if w is not None and str(w).startswith(str(self.root)):
+        # 1) Blocco durante avvio
+        if not self.allow_focus_out:
+            print("Focus Out prevented (startup)")
             return
 
-        # avvia fade-out
-        self._fade_in_progress = True
+        # 2) Blocco durante invio tag
+        if self._sending_in_progress:
+            print("Focus Out prevented (sending)")
+            return
 
-        start_alpha = float(self.root.attributes("-alpha"))
+        # 3) Se il focus è ancora dentro la finestra → NON è un vero FocusOut
+        current = self.root.focus_displayof()
+        if current is not None:
+            print("Focus Out prevented (focus still inside window)")
+            return
+
+        # 4) Se siamo già sbiaditi, non rifare il fade
         beh = self.config.get("behaviour", {})
         target = beh.get("transparency_faded", 35) / 100
+        current_alpha = float(self.root.attributes("-alpha"))
+
+        if current_alpha <= target + 0.01:
+            print("Focus Out prevented (already faded)")
+            return
+
+        print(">>> REAL FOCUS OUT DETECTED <<<")
         duration = int(beh.get("fade_duration_ms", 300))
+        print(f"Fading {current_alpha} -> {target} in {duration} ms")
+
         self.fader.fade(
-            start_alpha=start_alpha,
+            start_alpha=current_alpha,
             end_alpha=target,
             duration_ms=duration
         )
