@@ -503,5 +503,11 @@
             "key": "noexit",
             "value": "yes"
         }
+    ],
+    "ser": [
+        {
+            "key": "highway",
+            "value": "service"
+        }
     ]
 }

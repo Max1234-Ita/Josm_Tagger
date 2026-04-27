@@ -840,6 +840,7 @@ class MainForm:
         self._reset_input()
 
     def send(self, code):
+
         self._sending_in_progress = True
         self._render_preview(code)
 
@@ -912,6 +913,7 @@ class MainForm:
 
                 self.root.after(0, done)
 
+        print(f"Applying code '{code}'")
         threading.Thread(target=worker, daemon=True).start()
 
     def _render_preview(self, code):
@@ -1051,6 +1053,7 @@ class MainForm:
         )
 
     def _on_focus_out(self, event=None):
+        print("FOCUS OUT TRIGGERED")
 
         # blocca durante avvio
         if not self.allow_focus_out:
