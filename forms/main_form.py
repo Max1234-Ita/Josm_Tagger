@@ -1199,8 +1199,15 @@ class MainForm:
             print("Focus Out prevented (fade disabled)")
             return
 
-        # 3) Se il focus è ancora dentro la finestra → NON è un vero FocusOut
-        current = self.root.focus_displayof()
+        # 3) Se il focus è ancora dentro la finestra -> NON è un vero FocusOut.
+        # Con ttk.Combobox, durante l'apertura del menu a discesa Tk può restituire
+        # un widget Tcl "popdown" non risolvibile via nametowidget (KeyError).
+        try:
+            current = self.root.focus_displayof()
+        except (KeyError, tk.TclError):
+            print("Focus Out prevented (combobox popdown transition)")
+            return
+
         if current is not None:
             print("Focus Out prevented (focus still inside window)")
             return
