@@ -863,6 +863,7 @@ class MainForm:
     def send(self, code):
 
         self._sending_in_progress = True
+        self._block_focus_out = True
         self._render_preview(code)
 
         def worker():
@@ -905,9 +906,10 @@ class MainForm:
                     self._sending_in_progress = False
                     self.allow_minimize = True
                     self.allow_fade = True
+                    self._block_focus_out = False
                     return
 
-                send_tags(tags_list)
+                send_tags(tags_list, main_root=self.root)
 
             finally:
 
@@ -932,7 +934,11 @@ class MainForm:
                     beh = self.config.get("behaviour", {})
                     if beh.get("on_apply") == "minimize_to_tray":
                         hide_delay = int(beh.get("hide_delay", 150))
+                        fade_duration = int(beh.get("fade_duration_ms", 300))
                         self.root.after(hide_delay, self._fade_then_minimize_to_tray)
+                        self.root.after(hide_delay + fade_duration + 100, lambda: setattr(self, "_block_focus_out", False))
+                    else:
+                        self._block_focus_out = False
 
                 self.root.after(0, done)
 
