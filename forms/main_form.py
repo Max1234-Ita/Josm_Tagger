@@ -937,7 +937,8 @@ class MainForm:
                 self.root.after(0, done)
 
         print(f"Applying code '{code}'")
-        threading.Thread(target=worker, daemon=True).start()
+        # threading.Thread(target=worker, daemon=True).start()
+        worker()
         pass
 
     def _render_preview(self, code):
@@ -973,35 +974,42 @@ class MainForm:
     # ---------------------------------------------------------
     def minimize_to_tray(self):
         """Nasconde la finestra e avvia la tray usando pystray."""
-        if self.tray_running:
-            return
+        if self.allow_minimize:
+            print('main_form -> Minimize to tray')
+            if self.tray_running:
+                return
 
-        # Disattiviamo il fading SOLO qui (pystray crasha se alpha cambia)
-        self.root.attributes("-alpha", 1.0)
-        self.root.withdraw()
+            # Disattiviamo il fading SOLO qui (pystray crasha se alpha cambia)
+            self.root.attributes("-alpha", 1.0)
+            self.root.withdraw()
 
-        self._start_tray_icon()
+            self._start_tray_icon()
+        else:
+            print('Minimize prevented. allow_minimize = False')
 
     def _fade_then_minimize_to_tray(self):
-        """Esegue prima il fade-out e solo dopo nasconde la finestra nella tray."""
-        if self.tray_running:
-            return
+        if self.allow_fade:
+            """Esegue prima il fade-out e solo dopo nasconde la finestra nella tray."""
+            if self.tray_running:
+                return
 
-        self._block_focus_out = True
+            self._block_focus_out = True
 
-        beh = self.config.get("behaviour", {})
-        duration = int(beh.get("fade_duration_ms", 300))
-        target = beh.get("transparency_faded", 35) / 100
-        current_alpha = float(self.root.attributes("-alpha"))
+            beh = self.config.get("behaviour", {})
+            duration = int(beh.get("fade_duration_ms", 300))
+            target = beh.get("transparency_faded", 35) / 100
+            current_alpha = float(self.root.attributes("-alpha"))
 
-        if current_alpha > target + 0.01:
-            self.fader.fade(
-                start_alpha=current_alpha,
-                end_alpha=target,
-                duration_ms=duration
-            )
+            if current_alpha > target + 0.01:
+                self.fader.fade(
+                    start_alpha=current_alpha,
+                    end_alpha=target,
+                    duration_ms=duration
+                )
 
-        self.root.after(duration, self.minimize_to_tray)
+            self.root.after(duration, self.minimize_to_tray)
+        else:
+            print('Fading prevented. allow_fade = False')
 
     def _start_tray_icon(self):
         """Crea la tray icon usando run_detached() della versione GitHub."""
@@ -1015,8 +1023,8 @@ class MainForm:
             icon_image,
             "JOSM Tagger",
             menu=pystray.Menu(
-                pystray.MenuItem("Mostra", self._on_tray_restore),
-                pystray.MenuItem("Esci", self._on_tray_exit)
+                pystray.MenuItem("Show", self._on_tray_restore),
+                pystray.MenuItem("Exit", self._on_tray_exit)
             )
         )
 

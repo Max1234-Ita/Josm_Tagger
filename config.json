@@ -32,6 +32,6 @@
     "transparency_faded": 35,
     "hide_delay": 150,
     "fade_delay": 120,
-    "fade_duration_ms": 1000
+    "fade_duration_ms": 750
   }
 }

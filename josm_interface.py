@@ -14,8 +14,10 @@ def focus_josm():
     win = windows[0]
 
     try:
-        win.activate()
+        print('Activating JOSM window')
+        win.activate()      # TODO - Activate fa sparire main_form E' topmost?.
     except:
+        print('Restoring JOSM window')
         win.minimize()
         win.restore()
         win.activate()
