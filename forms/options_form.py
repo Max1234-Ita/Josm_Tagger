@@ -5,6 +5,7 @@ import tkinter.ttk as ttk
 from tkinter import colorchooser, filedialog, messagebox
 
 from config_manager import load_config, save_config
+from effects import apply_background_picture
 
 
 class OptionsForm(tk.Toplevel):
@@ -42,6 +43,7 @@ class OptionsForm(tk.Toplevel):
         # --- WINDOW ---
         self.title("Preferences")
         self._configure_window_style()
+        apply_background_picture(self, self.config_data)
 
         # --- TK VARIABLES ---
         self._init_variables()

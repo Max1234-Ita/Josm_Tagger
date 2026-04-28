@@ -2,6 +2,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import simpledialog, messagebox
 from codes_manager import save_codes
+from effects import apply_background_picture
 
 
 class TagEditorForm:
@@ -25,6 +26,7 @@ class TagEditorForm:
         self.root.attributes("-topmost", True)
         self.root.attributes("-toolwindow", True)
         self.root.minsize(450, 300)
+        apply_background_picture(self.root, config)
 
         # Allow full resizing
         self.root.resizable(True, True)
@@ -493,6 +495,25 @@ class TagEditorForm:
                 widget.configure(font=font_conf)
             except:
                 pass
+            for child in widget.winfo_children():
+                apply(child)
+
+        apply(self.root)
+
+    # ---------------- Theme ----------------
+    def apply_theme(self):
+        theme = self.config.get("theme", {})
+        bg = theme.get("bg", "#f0f0f0")
+        fg = theme.get("fg", "#101010")
+
+        def apply(widget):
+            try:
+                widget.configure(bg=bg, fg=fg)
+            except Exception:
+                try:
+                    widget.configure(bg=bg)
+                except Exception:
+                    pass
             for child in widget.winfo_children():
                 apply(child)
 

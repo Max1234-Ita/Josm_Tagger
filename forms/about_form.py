@@ -4,6 +4,7 @@ import os
 import sys
 
 from main import appinfo
+from effects import apply_background_picture
 
 
 def resource_path(relative_path):
@@ -37,6 +38,7 @@ class AboutForm:
 
         self.window.title("About")
         self.window.attributes("-topmost", True)
+        apply_background_picture(self.window, self.config)
 
         # Disable resize
         self.window.resizable(False, False)

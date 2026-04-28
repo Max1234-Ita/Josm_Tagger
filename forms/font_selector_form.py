@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import font
 from config_manager import save_config
+from effects import apply_background_picture
 
 
 class FontSelectorForm:
@@ -25,6 +26,7 @@ class FontSelectorForm:
         self.root.attributes("-topmost", True)
         self.root.minsize(420, 340)
         self.root.resizable(True, True)
+        apply_background_picture(self.root, config)
 
         # ---------------- WINDOW STYLE ----------------
         try:

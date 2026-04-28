@@ -509,5 +509,23 @@
             "key": "highway",
             "value": "service"
         }
+    ],
+    "bl4": [
+        {
+            "key": "building:levels",
+            "value": "4"
+        }
+    ],
+    "bl5": [
+        {
+            "key": "building:levels",
+            "value": "5"
+        }
+    ],
+    "bl6": [
+        {
+            "key": "building:levels",
+            "value": "6"
+        }
     ]
 }
