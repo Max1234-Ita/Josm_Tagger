@@ -962,7 +962,12 @@ class MainForm:
         self.update_list()
 
     def open_editor(self):
-        TagEditorForm(self.root, self.codes)
+        TagEditorForm(
+            self.root,
+            self.codes,
+            on_save_callback=self.reload_codes,
+            config=self.config,
+        )
 
     def open_preferences(self):
         if getattr(self, "_preferences_form", None) is not None:
