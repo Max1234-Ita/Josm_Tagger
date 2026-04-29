@@ -125,7 +125,7 @@ class MainForm:
 
         # X → minimizza nella tray
         # self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
-        self.root.protocol("WM_DELETE_WINDOW", self._exit_app)
+        self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
 
         # --- WINDOW FADING ---
         # Semafori per controllare quando è permesso reagire al focus-out e quando no.
@@ -202,6 +202,7 @@ class MainForm:
         self.apply_font()
         self.apply_theme()
         self.update_list()
+        self._start_tray_icon()
 
         # Tooltip
         self._list_tooltip_window = None
@@ -982,23 +983,18 @@ class MainForm:
         """Nasconde la finestra e avvia la tray usando pystray."""
         if self.allow_minimize:
             print('main_form -> Minimize to tray')
-            if self.tray_running:
-                return
+            if not self.tray_running:
+                self._start_tray_icon()
 
             # Disattiviamo il fading SOLO qui (pystray crasha se alpha cambia)
             self.root.attributes("-alpha", 1.0)
             self.root.withdraw()
-
-            self._start_tray_icon()
         else:
             print('Minimize prevented. allow_minimize = False')
 
     def _fade_then_minimize_to_tray(self):
         if self.allow_fade:
             """Esegue prima il fade-out e solo dopo nasconde la finestra nella tray."""
-            if self.tray_running:
-                return
-
             self._block_focus_out = True
 
             beh = self.config.get("behaviour", {})
@@ -1038,13 +1034,6 @@ class MainForm:
         self.tray_icon.run_detached()
 
     def _on_tray_restore(self, icon=None, item=None):
-        try:
-            self.tray_icon.stop()
-        except:
-            pass
-
-        self.tray_running = False
-
         # Blocca focus-out durante tutto il restore
         self._block_focus_out = True
 
