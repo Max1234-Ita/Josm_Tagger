@@ -217,12 +217,6 @@
             "value": "garage"
         }
     ],
-    "leig": [
-        {
-            "key": "leisure",
-            "value": "garden"
-        }
-    ],
     "buy": [
         {
             "key": "building",
@@ -333,7 +327,12 @@
             "value": "retaining_wall"
         }
     ],
-    "leisw": [],
+    "leisw": [
+        {
+            "key": "leisure",
+            "value": "swimming_pool"
+        }
+    ],
     "tg": [
         {
             "key": "natural",
@@ -526,6 +525,12 @@
         {
             "key": "building:levels",
             "value": "6"
+        }
+    ],
+    "gar": [
+        {
+            "key": "leisure",
+            "value": "garden"
         }
     ]
 }

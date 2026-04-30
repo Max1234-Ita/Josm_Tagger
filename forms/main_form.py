@@ -33,7 +33,7 @@ from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
-from effects import TransparencyFader
+from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
 from josm_interface import send_tags
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
@@ -96,9 +96,13 @@ class MainForm:
         self.tray_icon = None
         self.tray_thread = None
         self.tray_running = False
+        self._is_exiting = False
+        self._last_normal_geometry = None
+        self._save_geometry_job = None
+        self._tray_minimize_notice_shown = False
 
         # --- THEME ---
-        theme = self.config.get("theme", {})
+        theme = get_active_theme(self.config)
         self.bg_color = theme.get("bg", "#2b2b2b")
         self.fg_color = theme.get("fg", "#ffffff")
         self.root.configure(bg=self.bg_color)
@@ -122,10 +126,11 @@ class MainForm:
         # --- GEOMETRY ---
         self.apply_geometry()
         self.root.bind("<Configure>", self._prevent_maximize)
+        self.root.bind("<Configure>", self._on_main_configure, add="+")
 
         # X → minimizza nella tray
         # self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
-        self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_main_window_close)
 
         # --- WINDOW FADING ---
         # Semafori per controllare quando è permesso reagire al focus-out e quando no.
@@ -183,6 +188,7 @@ class MainForm:
         self.code_list = None
         self.preview = None
         self.context_menu = None
+        self.history_menu = None
         self.menubar = None
         self.preview_frame = None
         self.paned = None
@@ -198,6 +204,7 @@ class MainForm:
         # Build GUI
         self.build_menu()
         self.build_ui()
+        self._init_command_history()
         self.register_hotkey()
         self.apply_font()
         self.apply_theme()
@@ -208,11 +215,12 @@ class MainForm:
         self._list_tooltip_window = None
         self._list_tooltip_last_index = None
 
-        # Load initial codes from config.json into the combobox (baseline behavior)
-        self.entry["values"] = list(self.codes.keys())
+        # Dropdown iniziale: solo codici disponibili (ordinati)
+        self.entry["values"] = sorted(self.codes.keys())
 
         # Restore panes layout after Tk has stabilized geometry
         self.root.after_idle(self._restore_panes_layout)
+        self.root.after(120, self._force_focus)
 
     # ---------------------------------------------------------
     # GEOMETRY
@@ -226,10 +234,12 @@ class MainForm:
                 w = geom.get("w", 560)
                 h = geom.get("h", 520)
                 self.root.geometry(f"{w}x{h}+{x}+{y}")
+                self._last_normal_geometry = {"x": x, "y": y, "w": w, "h": h}
                 return
             except:
                 pass
         self.root.geometry("560x520")
+        self._last_normal_geometry = {"x": 100, "y": 100, "w": 560, "h": 520}
 
     def save_geometry(self):
         """
@@ -253,6 +263,45 @@ class MainForm:
 
         with open("config.json", "w", encoding="utf-8") as f:
             json.dump(self.config, f, indent=2)
+
+    def _capture_current_normal_geometry(self):
+        try:
+            if str(self.root.state()) == "zoomed":
+                return
+        except Exception:
+            pass
+
+        try:
+            x = int(self.root.winfo_x())
+            y = int(self.root.winfo_y())
+            w = int(self.root.winfo_width())
+            h = int(self.root.winfo_height())
+            if w > 100 and h > 80:
+                self._last_normal_geometry = {"x": x, "y": y, "w": w, "h": h}
+        except Exception:
+            pass
+
+    def _on_main_configure(self, _event=None):
+        if self._is_exiting:
+            return
+        self._capture_current_normal_geometry()
+        if self._save_geometry_job is not None:
+            try:
+                self.root.after_cancel(self._save_geometry_job)
+            except Exception:
+                pass
+        self._save_geometry_job = self.root.after(250, self._flush_geometry_to_config)
+
+    def _flush_geometry_to_config(self):
+        self._save_geometry_job = None
+        if not self._last_normal_geometry:
+            return
+
+        self.config.setdefault("geometry", {})
+        current = self.config["geometry"].get("main_form", {})
+        if current != self._last_normal_geometry:
+            self.config["geometry"]["main_form"] = dict(self._last_normal_geometry)
+            save_config(self.config)
 
     def save_config(self):
         """
@@ -310,6 +359,12 @@ class MainForm:
         self.entry.bind("<Return>", self.apply_code)
         self.entry.bind("<Down>", self.focus_list)
         self.entry.bind("<Escape>", self.clear_input)
+        self.entry.bind("<Button-3>", self.show_history_menu)
+        self.entry.bind("<Menu>", self.show_history_menu_keyboard)
+        self.entry.bind("<Shift-F10>", self.show_history_menu_keyboard)
+        self.root.bind_all("<Menu>", self._on_global_menu_key, add="+")
+        self.root.bind_all("<Shift-F10>", self._on_global_menu_key, add="+")
+        self.root.bind_all("<KeyPress>", self._on_global_keypress, add="+")
 
         self.apply_button = tk.Button(top, text="Apply", command=self.apply_code, width=6)
         self.apply_button.pack(side="right")
@@ -439,7 +494,13 @@ class MainForm:
         self._list_tooltip_last_index = None
 
     def _on_preferences_close(self):
+        form = getattr(self, "_preferences_form", None)
         self._preferences_form = None
+        if form is not None:
+            try:
+                form.destroy()
+            except Exception:
+                pass
 
     def _show_list_tooltip(self, x, y, text):
         self._hide_list_tooltip()
@@ -674,25 +735,8 @@ class MainForm:
 
     # ---------------- THEME ----------------
     def apply_theme(self):
-        """Applica theme.bg e theme.fg a tutti i widget Tk compatibili."""
-        bg = self.bg_color
-        fg = self.fg_color
-
-        def apply_recursive(widget):
-            # Applica solo ai widget Tk (non ttk)
-            try:
-                widget.configure(bg=bg)
-            except:
-                pass
-            try:
-                widget.configure(fg=fg)
-            except:
-                pass
-
-            for child in widget.winfo_children():
-                apply_recursive(child)
-
-        apply_recursive(self.root)
+        """Applica il tema attivo ai widget Tk compatibili."""
+        apply_theme_colors(self.root, self.config)
 
     # ---------------- FONT ----------------
     def apply_font(self):
@@ -786,6 +830,12 @@ class MainForm:
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
 
+        # Dropdown combobox: suggerimenti live startswith (no MRU)
+        if text:
+            self.entry["values"] = self.filtered_codes
+        else:
+            self.entry["values"] = sorted(self.codes.keys())
+
         # Update preview with the first visible code
         if self.filtered_codes:
             first = self.filtered_codes[0]
@@ -845,14 +895,7 @@ class MainForm:
         self.allow_fade = True
 
     def _promote_code(self, code):
-        """Move the used code to the top of the combobox (MRU list)."""
-        values = list(self.entry["values"])
-
-        if code in values:
-            values.remove(code)
-
-        values.insert(0, code)
-        self.entry["values"] = values
+        self._update_command_history(code)
 
     def _reset_input(self):
         self.code_var.set("")
@@ -960,9 +1003,118 @@ class MainForm:
     def reload_codes(self):
         self.codes = load_codes()
         self.update_list()
+        self.entry["values"] = sorted(self.codes.keys())
+
+    def _init_command_history(self):
+        self.config.setdefault("command_history_items", 20)
+        raw_history = self.config.get("command_history", [])
+        if not isinstance(raw_history, list):
+            raw_history = []
+        self.command_history = []
+        for item in raw_history:
+            if isinstance(item, str) and item.strip():
+                self.command_history.append(item.strip())
+        self.history_menu = tk.Menu(self.root, tearoff=0)
+
+    def _get_history_limit(self):
+        try:
+            return max(1, int(self.config.get("command_history_items", 20)))
+        except Exception:
+            return 20
+
+    def _update_command_history(self, code):
+        if not isinstance(code, str):
+            return
+        code = code.strip()
+        if not code:
+            return
+
+        self.command_history = [c for c in self.command_history if c != code]
+        self.command_history.insert(0, code)
+        self.command_history = self.command_history[: self._get_history_limit()]
+        self.config["command_history"] = list(self.command_history)
+        save_config(self.config)
+
+    def show_history_menu(self, event):
+        if self.history_menu is None:
+            self.history_menu = tk.Menu(self.root, tearoff=0)
+
+        self.history_menu.delete(0, tk.END)
+        added = set()
+        for code in self.command_history:
+            if code in added:
+                continue
+            added.add(code)
+            self.history_menu.add_command(
+                label=code,
+                command=lambda c=code: self._select_history_code(c)
+            )
+
+        if not added:
+            self.history_menu.add_command(label="(empty)", state="disabled")
+
+        try:
+            self.history_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.history_menu.grab_release()
+
+    def show_history_menu_keyboard(self, _event=None):
+        self.entry.update_idletasks()
+        x = self.entry.winfo_rootx() + 12
+        y = self.entry.winfo_rooty() + self.entry.winfo_height() - 2
+
+        class _Evt:
+            pass
+
+        evt = _Evt()
+        evt.x_root = x
+        evt.y_root = y
+        self.show_history_menu(evt)
+        return "break"
+
+    def _focus_is_on_code_combobox(self):
+        try:
+            focused = self.root.focus_get()
+            if focused is None:
+                return False
+            focused_path = str(focused)
+            entry_path = str(self.entry)
+            return focused_path == entry_path or focused_path.startswith(entry_path + ".")
+        except Exception:
+            return False
+
+    def _on_global_menu_key(self, event=None):
+        if not self._focus_is_on_code_combobox():
+            return None
+        return self.show_history_menu_keyboard(event)
+
+    def _on_global_keypress(self, event=None):
+        if not self._focus_is_on_code_combobox():
+            return None
+        keysym = str(getattr(event, "keysym", "") or "")
+        keycode = int(getattr(event, "keycode", -1))
+        normalized = keysym.lower()
+        if (
+            normalized in ("menu", "app", "apps")
+            or "menu" in normalized
+            or "app" in normalized
+            or keycode in (93, 135)
+        ):
+            return self.show_history_menu_keyboard(event)
+        return None
+
+    def _select_history_code(self, code):
+        self.code_var.set(code)
+        self.entry.focus_set()
+        self.entry.icursor(tk.END)
 
     def open_editor(self):
-        TagEditorForm(self.root, self.codes)
+        TagEditorForm(
+            self.root,
+            self.codes,
+            on_save_callback=self.reload_codes,
+            config=self.config,
+        )
 
     def open_preferences(self):
         if getattr(self, "_preferences_form", None) is not None:
@@ -973,24 +1125,81 @@ class MainForm:
                 self._preferences_form = None
 
         from forms.options_form import OptionsForm
-        self._preferences_form = OptionsForm(self.root, self.config)
+        self._preferences_form = OptionsForm(
+            self.root,
+            self.config,
+            on_theme_toggle=self._apply_runtime_theme,
+        )
         self._preferences_form.protocol("WM_DELETE_WINDOW", self._on_preferences_close)
+
+    def _apply_runtime_theme(self):
+        active = get_active_theme(self.config)
+        self.bg_color = active.get("bg", "#2b2b2b")
+        self.fg_color = active.get("fg", "#ffffff")
+        self.apply_theme()
+
+        for child in self.root.winfo_children():
+            try:
+                if isinstance(child, tk.Toplevel):
+                    apply_theme_colors(child, self.config)
+                    apply_background_picture(child, self.config)
+            except Exception:
+                pass
 
     # ---------------------------------------------------------
     # SYSTEM TRAY SUPPORT (pystray)
     # ---------------------------------------------------------
     def minimize_to_tray(self):
         """Nasconde la finestra e avvia la tray usando pystray."""
+        if self._is_exiting:
+            return
         if self.allow_minimize:
             print('main_form -> Minimize to tray')
+            self._capture_current_normal_geometry()
             if not self.tray_running:
                 self._start_tray_icon()
 
             # Disattiviamo il fading SOLO qui (pystray crasha se alpha cambia)
             self.root.attributes("-alpha", 1.0)
             self.root.withdraw()
+            self._notify_first_minimize_to_tray()
         else:
             print('Minimize prevented. allow_minimize = False')
+
+    def _resolve_appname(self):
+        try:
+            main_mod = sys.modules.get("__main__")
+            if main_mod is not None and hasattr(main_mod, "appname"):
+                return str(getattr(main_mod, "appname"))
+        except Exception:
+            pass
+        try:
+            from main import appname as appname_from_main
+            return str(appname_from_main)
+        except Exception:
+            pass
+        return self.root.title() or "Application"
+
+    def _notify_first_minimize_to_tray(self):
+        if self._tray_minimize_notice_shown:
+            return
+        if not self.tray_running or self.tray_icon is None:
+            return
+
+        app_name = self._resolve_appname()
+        try:
+            self.tray_icon.notify(f"{app_name} is minimized to tray", title=app_name)
+            self._tray_minimize_notice_shown = True
+        except Exception:
+            pass
+
+    def _on_main_window_close(self):
+        beh = self.config.get("behaviour", {})
+        action = beh.get("on_close", "minimize_to_tray")
+        if action == "exit_app":
+            self._exit_app()
+            return
+        self.minimize_to_tray()
 
     def _fade_then_minimize_to_tray(self):
         if self.allow_fade:
@@ -1025,10 +1234,29 @@ class MainForm:
             icon_image,
             "JOSM Tagger",
             menu=pystray.Menu(
-                pystray.MenuItem("Show", self._on_tray_restore),
+                pystray.MenuItem("Show", self._on_tray_restore, default=True),
                 pystray.MenuItem("Exit", self._on_tray_exit)
             )
         )
+
+        # On Windows backend, pystray triggers default action on single left click.
+        # Override notify handler: restore only on double click, keep right click menu.
+        try:
+            from pystray._util import win32 as pystray_win32
+            original_notify = self.tray_icon._message_handlers.get(pystray_win32.WM_NOTIFY)
+            wm_lbutton_dblclk = getattr(pystray_win32, "WM_LBUTTONDBLCLK", 0x0203)
+
+            def _notify_double_click_only(wparam, lparam):
+                if lparam == wm_lbutton_dblclk:
+                    self._on_tray_restore()
+                    return 0
+                if lparam == pystray_win32.WM_RBUTTONUP and callable(original_notify):
+                    return original_notify(wparam, lparam)
+                return 0
+
+            self.tray_icon._message_handlers[pystray_win32.WM_NOTIFY] = _notify_double_click_only
+        except Exception:
+            pass
 
         self.tray_running = True
         self.tray_icon.run_detached()
@@ -1058,9 +1286,7 @@ class MainForm:
         self.root.after(500, lambda: setattr(self, "_block_focus_out", False))
 
     def _on_tray_exit(self, icon, item):
-        icon.visible = False
-        icon.stop()
-        self.root.quit()
+        self.root.after(0, self._exit_app)
 
     def _force_focus_on_entry(self):
         """Forza il focus sulla textbox dopo il restore."""
@@ -1255,11 +1481,29 @@ class MainForm:
             pass
 
     def _exit_app(self):
+        self._is_exiting = True
+        self._capture_current_normal_geometry()
+        if self._save_geometry_job is not None:
+            try:
+                self.root.after_cancel(self._save_geometry_job)
+            except Exception:
+                pass
+            self._save_geometry_job = None
+        self._flush_geometry_to_config()
+
         # Ricarica la config aggiornata da OptionsForm
         try:
             self.config = load_config()
         except Exception:
             pass  # in caso di problemi, almeno non sovrascriviamo
 
-        # save_config(self.config)
+        # Chiude l'icona tray persistente, poi termina la UI
+        try:
+            if self.tray_icon is not None:
+                self.tray_icon.visible = False
+                self.tray_icon.stop()
+        except Exception:
+            pass
+        self.tray_running = False
+
         self.root.destroy()

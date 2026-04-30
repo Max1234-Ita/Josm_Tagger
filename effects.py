@@ -6,6 +6,21 @@ from PIL import Image, ImageTk
 
 from config_manager import load_config
 
+
+def get_active_theme(config=None):
+    cfg = config if isinstance(config, dict) else load_config()
+    dark_enabled = bool(cfg.get("dark_theme_enabled", False))
+    key = "dark_theme" if dark_enabled else "theme"
+    theme = (cfg.get(key, {}) or {})
+    bg = theme.get("bg", "#f0f0f0")
+    return {
+        "bg": bg,
+        "panel": theme.get("panel", bg),
+        "fg": theme.get("fg", "#101010"),
+        "picture": theme.get("picture"),
+    }
+
+
 class TransparencyFader:
     def __init__(self, owner):
         self.owner = owner          # MainForm
@@ -53,7 +68,18 @@ def apply_background_picture(window, config=None):
     Child widgets are not modified.
     """
     cfg = config if isinstance(config, dict) else load_config()
-    picture = (cfg.get("theme", {}) or {}).get("picture")
+    picture = get_active_theme(cfg).get("picture")
+
+    old_label = getattr(window, "_bg_image_label", None)
+    if old_label is not None:
+        try:
+            old_label.destroy()
+        except Exception:
+            pass
+        window._bg_image_label = None
+        window._bg_image_tk = None
+        window._bg_image_original = None
+
     if not picture:
         return
 
@@ -77,4 +103,25 @@ def apply_background_picture(window, config=None):
     window._bg_image_label = bg_label
     window._bg_image_tk = ImageTk.PhotoImage(window._bg_image_original)
     window._bg_image_label.configure(image=window._bg_image_tk)
+
+
+def apply_theme_colors(window, config=None):
+    theme = get_active_theme(config)
+    bg = theme.get("bg", "#f0f0f0")
+    panel = theme.get("panel", bg)
+    fg = theme.get("fg", "#101010")
+
+    def apply(widget, root_widget=False):
+        target_bg = bg if root_widget else panel
+        try:
+            widget.configure(bg=target_bg, fg=fg)
+        except Exception:
+            try:
+                widget.configure(bg=target_bg)
+            except Exception:
+                pass
+        for child in widget.winfo_children():
+            apply(child, root_widget=False)
+
+    apply(window, root_widget=True)
 
