@@ -96,6 +96,7 @@ class MainForm:
         self.tray_icon = None
         self.tray_thread = None
         self.tray_running = False
+        self._is_exiting = False
 
         # --- THEME ---
         theme = self.config.get("theme", {})
@@ -183,6 +184,7 @@ class MainForm:
         self.code_list = None
         self.preview = None
         self.context_menu = None
+        self.history_menu = None
         self.menubar = None
         self.preview_frame = None
         self.paned = None
@@ -198,6 +200,7 @@ class MainForm:
         # Build GUI
         self.build_menu()
         self.build_ui()
+        self._init_command_history()
         self.register_hotkey()
         self.apply_font()
         self.apply_theme()
@@ -208,11 +211,12 @@ class MainForm:
         self._list_tooltip_window = None
         self._list_tooltip_last_index = None
 
-        # Load initial codes from config.json into the combobox (baseline behavior)
-        self.entry["values"] = list(self.codes.keys())
+        # Dropdown iniziale: solo codici disponibili (ordinati)
+        self.entry["values"] = sorted(self.codes.keys())
 
         # Restore panes layout after Tk has stabilized geometry
         self.root.after_idle(self._restore_panes_layout)
+        self.root.after(120, self._force_focus)
 
     # ---------------------------------------------------------
     # GEOMETRY
@@ -310,6 +314,12 @@ class MainForm:
         self.entry.bind("<Return>", self.apply_code)
         self.entry.bind("<Down>", self.focus_list)
         self.entry.bind("<Escape>", self.clear_input)
+        self.entry.bind("<Button-3>", self.show_history_menu)
+        self.entry.bind("<Menu>", self.show_history_menu_keyboard)
+        self.entry.bind("<Shift-F10>", self.show_history_menu_keyboard)
+        self.root.bind_all("<Menu>", self._on_global_menu_key, add="+")
+        self.root.bind_all("<Shift-F10>", self._on_global_menu_key, add="+")
+        self.root.bind_all("<KeyPress>", self._on_global_keypress, add="+")
 
         self.apply_button = tk.Button(top, text="Apply", command=self.apply_code, width=6)
         self.apply_button.pack(side="right")
@@ -786,6 +796,12 @@ class MainForm:
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
 
+        # Dropdown combobox: suggerimenti live startswith (no MRU)
+        if text:
+            self.entry["values"] = self.filtered_codes
+        else:
+            self.entry["values"] = sorted(self.codes.keys())
+
         # Update preview with the first visible code
         if self.filtered_codes:
             first = self.filtered_codes[0]
@@ -845,14 +861,7 @@ class MainForm:
         self.allow_fade = True
 
     def _promote_code(self, code):
-        """Move the used code to the top of the combobox (MRU list)."""
-        values = list(self.entry["values"])
-
-        if code in values:
-            values.remove(code)
-
-        values.insert(0, code)
-        self.entry["values"] = values
+        self._update_command_history(code)
 
     def _reset_input(self):
         self.code_var.set("")
@@ -960,6 +969,110 @@ class MainForm:
     def reload_codes(self):
         self.codes = load_codes()
         self.update_list()
+        self.entry["values"] = sorted(self.codes.keys())
+
+    def _init_command_history(self):
+        self.config.setdefault("command_history_items", 20)
+        raw_history = self.config.get("command_history", [])
+        if not isinstance(raw_history, list):
+            raw_history = []
+        self.command_history = []
+        for item in raw_history:
+            if isinstance(item, str) and item.strip():
+                self.command_history.append(item.strip())
+        self.history_menu = tk.Menu(self.root, tearoff=0)
+
+    def _get_history_limit(self):
+        try:
+            return max(1, int(self.config.get("command_history_items", 20)))
+        except Exception:
+            return 20
+
+    def _update_command_history(self, code):
+        if not isinstance(code, str):
+            return
+        code = code.strip()
+        if not code:
+            return
+
+        self.command_history = [c for c in self.command_history if c != code]
+        self.command_history.insert(0, code)
+        self.command_history = self.command_history[: self._get_history_limit()]
+        self.config["command_history"] = list(self.command_history)
+        save_config(self.config)
+
+    def show_history_menu(self, event):
+        if self.history_menu is None:
+            self.history_menu = tk.Menu(self.root, tearoff=0)
+
+        self.history_menu.delete(0, tk.END)
+        added = set()
+        for code in self.command_history:
+            if code in added:
+                continue
+            added.add(code)
+            self.history_menu.add_command(
+                label=code,
+                command=lambda c=code: self._select_history_code(c)
+            )
+
+        if not added:
+            self.history_menu.add_command(label="(empty)", state="disabled")
+
+        try:
+            self.history_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.history_menu.grab_release()
+
+    def show_history_menu_keyboard(self, _event=None):
+        self.entry.update_idletasks()
+        x = self.entry.winfo_rootx() + 12
+        y = self.entry.winfo_rooty() + self.entry.winfo_height() - 2
+
+        class _Evt:
+            pass
+
+        evt = _Evt()
+        evt.x_root = x
+        evt.y_root = y
+        self.show_history_menu(evt)
+        return "break"
+
+    def _focus_is_on_code_combobox(self):
+        try:
+            focused = self.root.focus_get()
+            if focused is None:
+                return False
+            focused_path = str(focused)
+            entry_path = str(self.entry)
+            return focused_path == entry_path or focused_path.startswith(entry_path + ".")
+        except Exception:
+            return False
+
+    def _on_global_menu_key(self, event=None):
+        if not self._focus_is_on_code_combobox():
+            return None
+        return self.show_history_menu_keyboard(event)
+
+    def _on_global_keypress(self, event=None):
+        if not self._focus_is_on_code_combobox():
+            return None
+        keysym = str(getattr(event, "keysym", "") or "")
+        keycode = int(getattr(event, "keycode", -1))
+        normalized = keysym.lower()
+        if (
+            normalized in ("menu", "app", "apps")
+            or "menu" in normalized
+            or "app" in normalized
+            or keycode in (93, 135)
+        ):
+            return self.show_history_menu_keyboard(event)
+        return None
+
+    def _select_history_code(self, code):
+        self.code_var.set(code)
+        self.entry.focus_set()
+        self.entry.icursor(tk.END)
 
     def open_editor(self):
         TagEditorForm(
@@ -986,6 +1099,8 @@ class MainForm:
     # ---------------------------------------------------------
     def minimize_to_tray(self):
         """Nasconde la finestra e avvia la tray usando pystray."""
+        if self._is_exiting:
+            return
         if self.allow_minimize:
             print('main_form -> Minimize to tray')
             if not self.tray_running:
@@ -1063,9 +1178,7 @@ class MainForm:
         self.root.after(500, lambda: setattr(self, "_block_focus_out", False))
 
     def _on_tray_exit(self, icon, item):
-        icon.visible = False
-        icon.stop()
-        self.root.quit()
+        self.root.after(0, self._exit_app)
 
     def _force_focus_on_entry(self):
         """Forza il focus sulla textbox dopo il restore."""
@@ -1260,11 +1373,21 @@ class MainForm:
             pass
 
     def _exit_app(self):
+        self._is_exiting = True
+
         # Ricarica la config aggiornata da OptionsForm
         try:
             self.config = load_config()
         except Exception:
             pass  # in caso di problemi, almeno non sovrascriviamo
 
-        # save_config(self.config)
+        # Chiude l'icona tray persistente, poi termina la UI
+        try:
+            if self.tray_icon is not None:
+                self.tray_icon.visible = False
+                self.tray_icon.stop()
+        except Exception:
+            pass
+        self.tray_running = False
+
         self.root.destroy()

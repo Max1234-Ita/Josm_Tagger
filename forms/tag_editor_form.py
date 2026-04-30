@@ -3,7 +3,7 @@ import os
 import sys
 import tkinter as tk
 import tkinter.ttk as ttk
-from tkinter import messagebox
+from tkinter import messagebox, simpledialog
 
 from codes_manager import save_codes
 from effects import apply_background_picture
@@ -233,6 +233,8 @@ class TagEditorForm:
         self.entry_code = None
         self.code_list = None
         self.tag_list = None
+        self.tag_context_menu = None
+        self.code_context_menu = None
 
         self.build_ui()
         self.apply_font()
@@ -297,6 +299,7 @@ class TagEditorForm:
         scrollbar_left.pack(side="right", fill="y")
         self.code_list.config(yscrollcommand=scrollbar_left.set)
         self.code_list.bind("<<ListboxSelect>>", self.on_code_select)
+        self.code_list.bind("<Button-3>", self.show_code_context_menu)
         paned.add(left_frame, minsize=170)
 
         right_frame = tk.Frame(paned)
@@ -309,6 +312,7 @@ class TagEditorForm:
         scrollbar = tk.Scrollbar(tag_container, command=self.tag_list.yview)
         scrollbar.pack(side="right", fill="y")
         self.tag_list.config(yscrollcommand=scrollbar.set)
+        self.tag_list.bind("<Button-3>", self.show_tag_context_menu)
 
         btn_frame = tk.Frame(right_frame)
         btn_frame.pack(pady=6)
@@ -317,6 +321,9 @@ class TagEditorForm:
         tk.Button(btn_frame, text="Remove", width=10, command=self.remove_tag).pack(side="left", padx=4)
 
         paned.add(right_frame, minsize=300)
+
+        self.tag_context_menu = tk.Menu(self.root, tearoff=0)
+        self.code_context_menu = tk.Menu(self.root, tearoff=0)
 
         bottom = tk.Frame(self.root)
         bottom.pack(fill="x", padx=6, pady=(0, 6))
@@ -363,6 +370,72 @@ class TagEditorForm:
         self._trace_id = self.code_var.trace_add("write", self.auto_load_code)
         self.current_code = code
         self.update_tag_list()
+
+    def show_tag_context_menu(self, event):
+        nearest = self.tag_list.nearest(event.y)
+        size = self.tag_list.size()
+        clicked_on_item = False
+
+        if 0 <= nearest < size:
+            bbox = self.tag_list.bbox(nearest)
+            if bbox:
+                x, y, w, h = bbox
+                if y <= event.y <= y + h:
+                    clicked_on_item = True
+
+        self.tag_context_menu.delete(0, tk.END)
+        self.tag_context_menu.add_command(label="Add", command=self.add_tag)
+
+        if clicked_on_item:
+            self.tag_list.selection_clear(0, tk.END)
+            self.tag_list.selection_set(nearest)
+            self.tag_list.activate(nearest)
+            self.tag_context_menu.add_command(label="Edit", command=self.edit_tag)
+            self.tag_context_menu.add_command(label="Remove", command=self.remove_tag)
+        else:
+            self.tag_list.selection_clear(0, tk.END)
+
+        try:
+            self.tag_context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.tag_context_menu.grab_release()
+
+    def show_code_context_menu(self, event):
+        nearest = self.code_list.nearest(event.y)
+        size = self.code_list.size()
+        clicked_on_item = False
+
+        if 0 <= nearest < size:
+            bbox = self.code_list.bbox(nearest)
+            if bbox:
+                _x, y, _w, h = bbox
+                if y <= event.y <= y + h:
+                    clicked_on_item = True
+
+        self.code_context_menu.delete(0, tk.END)
+        self.code_context_menu.add_command(label="New", command=self.new_code)
+
+        if clicked_on_item:
+            self.code_list.selection_clear(0, tk.END)
+            self.code_list.selection_set(nearest)
+            self.code_list.activate(nearest)
+            code = self.code_list.get(nearest)
+            if self._trace_id:
+                self.code_var.trace_remove("write", self._trace_id)
+            self.code_var.set(code)
+            self._trace_id = self.code_var.trace_add("write", self.auto_load_code)
+            self.current_code = code
+            self.update_tag_list()
+
+            self.code_context_menu.add_command(label="Rename", command=self.rename_code)
+            self.code_context_menu.add_command(label="Delete", command=self.delete_code)
+        else:
+            self.code_list.selection_clear(0, tk.END)
+
+        try:
+            self.code_context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            self.code_context_menu.grab_release()
 
     def load_code(self, code):
         if code not in self.working_codes:
@@ -444,6 +517,54 @@ class TagEditorForm:
         self.update_code_list()
         self.load_code(code)
         self.add_tag()
+
+    def rename_code(self):
+        sel = self.code_list.curselection()
+        if not sel:
+            messagebox.showwarning("Warning", "Please select a code to rename", parent=self.root)
+            return
+
+        old_code = self.code_list.get(sel[0])
+        new_code = simpledialog.askstring(
+            "Rename code",
+            "Enter new code name:",
+            initialvalue=old_code,
+            parent=self.root,
+        )
+        if not new_code:
+            return
+        new_code = new_code.strip()
+        if not new_code or new_code == old_code:
+            return
+        if new_code in self.working_codes:
+            messagebox.showwarning("Warning", "Code already exists", parent=self.root)
+            return
+
+        self.working_codes[new_code] = self.working_codes.pop(old_code)
+        self.update_code_list()
+        self.load_code(new_code)
+
+    def delete_code(self):
+        sel = self.code_list.curselection()
+        if not sel:
+            messagebox.showwarning("Warning", "Please select a code to delete", parent=self.root)
+            return
+
+        code = self.code_list.get(sel[0])
+        confirm = messagebox.askyesno("Delete code", f"Delete code '{code}'?", parent=self.root)
+        if not confirm:
+            return
+
+        self.working_codes.pop(code, None)
+        self.update_code_list()
+
+        if self.current_code == code:
+            self.current_code = None
+            if self._trace_id:
+                self.code_var.trace_remove("write", self._trace_id)
+            self.code_var.set("")
+            self._trace_id = self.code_var.trace_add("write", self.auto_load_code)
+            self.tag_list.delete(0, tk.END)
 
     def ok(self):
         save_codes(self.working_codes)

@@ -33,5 +33,14 @@
     "hide_delay": 150,
     "fade_delay": 120,
     "fade_duration_ms": 750
-  }
+  },
+  "command_history_items": 20,
+  "command_history": [
+    "bf",
+    "bg",
+    "pser",
+    "tub",
+    "brw",
+    "eny"
+  ]
 }
