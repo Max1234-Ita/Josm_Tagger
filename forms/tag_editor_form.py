@@ -6,7 +6,7 @@ import tkinter.ttk as ttk
 from tkinter import messagebox, simpledialog
 
 from codes_manager import save_codes
-from effects import apply_background_picture
+from effects import apply_background_picture, apply_theme_colors
 
 
 def _monitor_workarea_from_point(x, y, fallback_window):
@@ -153,22 +153,7 @@ class TagPropertiesForm:
         apply(self.root)
 
     def _apply_theme(self):
-        theme = self.config.get("theme", {})
-        bg = theme.get("bg", "#f0f0f0")
-        fg = theme.get("fg", "#101010")
-
-        def apply(widget):
-            try:
-                widget.configure(bg=bg, fg=fg)
-            except Exception:
-                try:
-                    widget.configure(bg=bg)
-                except Exception:
-                    pass
-            for child in widget.winfo_children():
-                apply(child)
-
-        apply(self.root)
+        apply_theme_colors(self.root, self.config)
 
     def _place_near_pointer(self):
         self.root.update_idletasks()
@@ -348,6 +333,10 @@ class TagEditorForm:
         else:
             self.current_code = None
             self.tag_list.delete(0, tk.END)
+            if filtered:
+                self._select_code_in_available_list(filtered[0])
+            else:
+                self.code_list.selection_clear(0, tk.END)
 
     def _select_code_in_available_list(self, code):
         values = list(self.code_list.get(0, tk.END))
@@ -601,19 +590,4 @@ class TagEditorForm:
         apply(self.root)
 
     def apply_theme(self):
-        theme = self.config.get("theme", {})
-        bg = theme.get("bg", "#f0f0f0")
-        fg = theme.get("fg", "#101010")
-
-        def apply(widget):
-            try:
-                widget.configure(bg=bg, fg=fg)
-            except Exception:
-                try:
-                    widget.configure(bg=bg)
-                except Exception:
-                    pass
-            for child in widget.winfo_children():
-                apply(child)
-
-        apply(self.root)
+        apply_theme_colors(self.root, self.config)

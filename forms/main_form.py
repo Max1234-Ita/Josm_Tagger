@@ -33,7 +33,7 @@ from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
-from effects import TransparencyFader
+from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
 from josm_interface import send_tags
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
@@ -97,9 +97,12 @@ class MainForm:
         self.tray_thread = None
         self.tray_running = False
         self._is_exiting = False
+        self._last_normal_geometry = None
+        self._save_geometry_job = None
+        self._tray_minimize_notice_shown = False
 
         # --- THEME ---
-        theme = self.config.get("theme", {})
+        theme = get_active_theme(self.config)
         self.bg_color = theme.get("bg", "#2b2b2b")
         self.fg_color = theme.get("fg", "#ffffff")
         self.root.configure(bg=self.bg_color)
@@ -123,10 +126,11 @@ class MainForm:
         # --- GEOMETRY ---
         self.apply_geometry()
         self.root.bind("<Configure>", self._prevent_maximize)
+        self.root.bind("<Configure>", self._on_main_configure, add="+")
 
         # X → minimizza nella tray
         # self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
-        self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_main_window_close)
 
         # --- WINDOW FADING ---
         # Semafori per controllare quando è permesso reagire al focus-out e quando no.
@@ -230,10 +234,12 @@ class MainForm:
                 w = geom.get("w", 560)
                 h = geom.get("h", 520)
                 self.root.geometry(f"{w}x{h}+{x}+{y}")
+                self._last_normal_geometry = {"x": x, "y": y, "w": w, "h": h}
                 return
             except:
                 pass
         self.root.geometry("560x520")
+        self._last_normal_geometry = {"x": 100, "y": 100, "w": 560, "h": 520}
 
     def save_geometry(self):
         """
@@ -257,6 +263,45 @@ class MainForm:
 
         with open("config.json", "w", encoding="utf-8") as f:
             json.dump(self.config, f, indent=2)
+
+    def _capture_current_normal_geometry(self):
+        try:
+            if str(self.root.state()) == "zoomed":
+                return
+        except Exception:
+            pass
+
+        try:
+            x = int(self.root.winfo_x())
+            y = int(self.root.winfo_y())
+            w = int(self.root.winfo_width())
+            h = int(self.root.winfo_height())
+            if w > 100 and h > 80:
+                self._last_normal_geometry = {"x": x, "y": y, "w": w, "h": h}
+        except Exception:
+            pass
+
+    def _on_main_configure(self, _event=None):
+        if self._is_exiting:
+            return
+        self._capture_current_normal_geometry()
+        if self._save_geometry_job is not None:
+            try:
+                self.root.after_cancel(self._save_geometry_job)
+            except Exception:
+                pass
+        self._save_geometry_job = self.root.after(250, self._flush_geometry_to_config)
+
+    def _flush_geometry_to_config(self):
+        self._save_geometry_job = None
+        if not self._last_normal_geometry:
+            return
+
+        self.config.setdefault("geometry", {})
+        current = self.config["geometry"].get("main_form", {})
+        if current != self._last_normal_geometry:
+            self.config["geometry"]["main_form"] = dict(self._last_normal_geometry)
+            save_config(self.config)
 
     def save_config(self):
         """
@@ -449,7 +494,13 @@ class MainForm:
         self._list_tooltip_last_index = None
 
     def _on_preferences_close(self):
+        form = getattr(self, "_preferences_form", None)
         self._preferences_form = None
+        if form is not None:
+            try:
+                form.destroy()
+            except Exception:
+                pass
 
     def _show_list_tooltip(self, x, y, text):
         self._hide_list_tooltip()
@@ -684,25 +735,8 @@ class MainForm:
 
     # ---------------- THEME ----------------
     def apply_theme(self):
-        """Applica theme.bg e theme.fg a tutti i widget Tk compatibili."""
-        bg = self.bg_color
-        fg = self.fg_color
-
-        def apply_recursive(widget):
-            # Applica solo ai widget Tk (non ttk)
-            try:
-                widget.configure(bg=bg)
-            except:
-                pass
-            try:
-                widget.configure(fg=fg)
-            except:
-                pass
-
-            for child in widget.winfo_children():
-                apply_recursive(child)
-
-        apply_recursive(self.root)
+        """Applica il tema attivo ai widget Tk compatibili."""
+        apply_theme_colors(self.root, self.config)
 
     # ---------------- FONT ----------------
     def apply_font(self):
@@ -1091,8 +1125,26 @@ class MainForm:
                 self._preferences_form = None
 
         from forms.options_form import OptionsForm
-        self._preferences_form = OptionsForm(self.root, self.config)
+        self._preferences_form = OptionsForm(
+            self.root,
+            self.config,
+            on_theme_toggle=self._apply_runtime_theme,
+        )
         self._preferences_form.protocol("WM_DELETE_WINDOW", self._on_preferences_close)
+
+    def _apply_runtime_theme(self):
+        active = get_active_theme(self.config)
+        self.bg_color = active.get("bg", "#2b2b2b")
+        self.fg_color = active.get("fg", "#ffffff")
+        self.apply_theme()
+
+        for child in self.root.winfo_children():
+            try:
+                if isinstance(child, tk.Toplevel):
+                    apply_theme_colors(child, self.config)
+                    apply_background_picture(child, self.config)
+            except Exception:
+                pass
 
     # ---------------------------------------------------------
     # SYSTEM TRAY SUPPORT (pystray)
@@ -1103,14 +1155,51 @@ class MainForm:
             return
         if self.allow_minimize:
             print('main_form -> Minimize to tray')
+            self._capture_current_normal_geometry()
             if not self.tray_running:
                 self._start_tray_icon()
 
             # Disattiviamo il fading SOLO qui (pystray crasha se alpha cambia)
             self.root.attributes("-alpha", 1.0)
             self.root.withdraw()
+            self._notify_first_minimize_to_tray()
         else:
             print('Minimize prevented. allow_minimize = False')
+
+    def _resolve_appname(self):
+        try:
+            main_mod = sys.modules.get("__main__")
+            if main_mod is not None and hasattr(main_mod, "appname"):
+                return str(getattr(main_mod, "appname"))
+        except Exception:
+            pass
+        try:
+            from main import appname as appname_from_main
+            return str(appname_from_main)
+        except Exception:
+            pass
+        return self.root.title() or "Application"
+
+    def _notify_first_minimize_to_tray(self):
+        if self._tray_minimize_notice_shown:
+            return
+        if not self.tray_running or self.tray_icon is None:
+            return
+
+        app_name = self._resolve_appname()
+        try:
+            self.tray_icon.notify(f"{app_name} is minimized to tray", title=app_name)
+            self._tray_minimize_notice_shown = True
+        except Exception:
+            pass
+
+    def _on_main_window_close(self):
+        beh = self.config.get("behaviour", {})
+        action = beh.get("on_close", "minimize_to_tray")
+        if action == "exit_app":
+            self._exit_app()
+            return
+        self.minimize_to_tray()
 
     def _fade_then_minimize_to_tray(self):
         if self.allow_fade:
@@ -1145,10 +1234,29 @@ class MainForm:
             icon_image,
             "JOSM Tagger",
             menu=pystray.Menu(
-                pystray.MenuItem("Show", self._on_tray_restore),
+                pystray.MenuItem("Show", self._on_tray_restore, default=True),
                 pystray.MenuItem("Exit", self._on_tray_exit)
             )
         )
+
+        # On Windows backend, pystray triggers default action on single left click.
+        # Override notify handler: restore only on double click, keep right click menu.
+        try:
+            from pystray._util import win32 as pystray_win32
+            original_notify = self.tray_icon._message_handlers.get(pystray_win32.WM_NOTIFY)
+            wm_lbutton_dblclk = getattr(pystray_win32, "WM_LBUTTONDBLCLK", 0x0203)
+
+            def _notify_double_click_only(wparam, lparam):
+                if lparam == wm_lbutton_dblclk:
+                    self._on_tray_restore()
+                    return 0
+                if lparam == pystray_win32.WM_RBUTTONUP and callable(original_notify):
+                    return original_notify(wparam, lparam)
+                return 0
+
+            self.tray_icon._message_handlers[pystray_win32.WM_NOTIFY] = _notify_double_click_only
+        except Exception:
+            pass
 
         self.tray_running = True
         self.tray_icon.run_detached()
@@ -1374,6 +1482,14 @@ class MainForm:
 
     def _exit_app(self):
         self._is_exiting = True
+        self._capture_current_normal_geometry()
+        if self._save_geometry_job is not None:
+            try:
+                self.root.after_cancel(self._save_geometry_job)
+            except Exception:
+                pass
+            self._save_geometry_job = None
+        self._flush_geometry_to_config()
 
         # Ricarica la config aggiornata da OptionsForm
         try:

@@ -1,11 +1,12 @@
 import os
+import sys
 import copy
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import colorchooser, filedialog, messagebox
 
 from config_manager import load_config, save_config
-from effects import apply_background_picture
+from effects import apply_background_picture, apply_theme_colors, get_active_theme
 
 
 class OptionsForm(tk.Toplevel):
@@ -18,16 +19,18 @@ class OptionsForm(tk.Toplevel):
     - On Cancel or [X]: no changes, no save.
     """
 
-    def __init__(self, master, config):
+    def __init__(self, master, config, on_theme_toggle=None):
         super().__init__(master)
 
         # --- CONFIGURATION ---
         # config is the global config passed by MainForm
         self.config = config
+        self.on_theme_toggle = on_theme_toggle
 
         # Deep copy → working copy
         self.config_data = load_config()
         self.temp_config = copy.deepcopy(self.config_data)
+        self._initial_dark_mode_enabled = bool(self.config_data.get("dark_theme_enabled", False))
 
         # Prevent resizing
         self.resizable(False, False)
@@ -43,6 +46,7 @@ class OptionsForm(tk.Toplevel):
         # --- WINDOW ---
         self.title("Preferences")
         self._configure_window_style()
+        self._apply_current_theme_to_form()
         apply_background_picture(self, self.config_data)
 
         # --- TK VARIABLES ---
@@ -59,6 +63,7 @@ class OptionsForm(tk.Toplevel):
         # Initial focus
         self.transient(master)
         self.grab_set()
+        self._place_near_pointer_with_parent_offset(master)
         self.focus_set()
 
 
@@ -69,12 +74,20 @@ class OptionsForm(tk.Toplevel):
     def _ensure_defaults(self):
         theme = self.temp_config.setdefault("theme", {})
         theme.setdefault("bg", "#f0f0f0")
+        theme.setdefault("panel", "#e4e6ea")
         theme.setdefault("fg", "#101010")
         theme.setdefault("picture", None)
+        dark_theme = self.temp_config.setdefault("dark_theme", {})
+        dark_theme.setdefault("bg", "#1e1f22")
+        dark_theme.setdefault("panel", "#2a2e35")
+        dark_theme.setdefault("fg", "#d8d8d8")
+        dark_theme.setdefault("picture", None)
+        self.temp_config.setdefault("dark_theme_enabled", False)
 
         behaviour = self.temp_config.setdefault("behaviour", {})
         behaviour.setdefault("on_focus_loss", "do_nothing")
         behaviour.setdefault("on_apply", "keep_visible")
+        behaviour.setdefault("on_close", "minimize_to_tray")
         behaviour.setdefault("transparency_active", 100)
         behaviour.setdefault("transparency_faded", 35)
         behaviour.setdefault("hide_delay", 150)
@@ -94,6 +107,70 @@ class OptionsForm(tk.Toplevel):
         except Exception:
             pass
 
+    def _monitor_workarea_from_point(self, x, y):
+        if sys.platform.startswith("win"):
+            try:
+                import ctypes
+                from ctypes import wintypes
+
+                class POINT(ctypes.Structure):
+                    _fields_ = [("x", wintypes.LONG), ("y", wintypes.LONG)]
+
+                class RECT(ctypes.Structure):
+                    _fields_ = [
+                        ("left", wintypes.LONG),
+                        ("top", wintypes.LONG),
+                        ("right", wintypes.LONG),
+                        ("bottom", wintypes.LONG),
+                    ]
+
+                class MONITORINFO(ctypes.Structure):
+                    _fields_ = [
+                        ("cbSize", wintypes.DWORD),
+                        ("rcMonitor", RECT),
+                        ("rcWork", RECT),
+                        ("dwFlags", wintypes.DWORD),
+                    ]
+
+                user32 = ctypes.windll.user32
+                pt = POINT(int(x), int(y))
+                monitor = user32.MonitorFromPoint(pt, 2)  # MONITOR_DEFAULTTONEAREST
+                if monitor:
+                    info = MONITORINFO()
+                    info.cbSize = ctypes.sizeof(MONITORINFO)
+                    if user32.GetMonitorInfoW(monitor, ctypes.byref(info)):
+                        return (
+                            int(info.rcWork.left),
+                            int(info.rcWork.top),
+                            int(info.rcWork.right),
+                            int(info.rcWork.bottom),
+                        )
+            except Exception:
+                pass
+
+        return 0, 0, int(self.winfo_screenwidth()), int(self.winfo_screenheight())
+
+    def _clamp_to_monitor(self, x, y):
+        self.update_idletasks()
+        ww = max(1, int(self.winfo_width()))
+        wh = max(1, int(self.winfo_height()))
+        left, top, right, bottom = self._monitor_workarea_from_point(x, y)
+
+        max_x = max(left, right - ww)
+        max_y = max(top, bottom - wh)
+        clamped_x = min(max(int(x), left), max_x)
+        clamped_y = min(max(int(y), top), max_y)
+        return clamped_x, clamped_y
+
+    def _place_near_pointer_with_parent_offset(self, parent):
+        self.update_idletasks()
+        px = self.winfo_pointerx()
+        py = self.winfo_pointery()
+        ox = int(parent.winfo_width() * 0.30)
+        oy = int(parent.winfo_height() * 0.30)
+        x, y = self._clamp_to_monitor(px + ox, py + oy)
+        self.geometry(f"+{x}+{y}")
+
     # --------------------------------------------------------------------- #
     #  SCALING HELPER
     # --------------------------------------------------------------------- #
@@ -107,7 +184,9 @@ class OptionsForm(tk.Toplevel):
     # --------------------------------------------------------------------- #
 
     def _init_variables(self):
-        theme = self.temp_config["theme"]
+        self.dark_mode_var = tk.BooleanVar(value=bool(self.temp_config.get("dark_theme_enabled", False)))
+        self._current_theme_key = "dark_theme" if self.dark_mode_var.get() else "theme"
+        theme = self.temp_config[self._current_theme_key]
         behaviour = self.temp_config["behaviour"]
 
         # Appearance - Background
@@ -118,6 +197,7 @@ class OptionsForm(tk.Toplevel):
 
         # Appearance - Foreground
         self.fg_color_var = tk.StringVar(value=theme.get("fg", "#101010"))
+        self.panel_color_var = tk.StringVar(value=theme.get("panel", "#e4e6ea"))
 
         # Behaviour - On focus loss
         self.on_focus_loss_map = {
@@ -141,6 +221,17 @@ class OptionsForm(tk.Toplevel):
             value=self.on_apply_map.get(current_oa, "Keep form visible")
         )
 
+        # Behaviour - On close
+        self.on_close_map = {
+            "minimize_to_tray": "Minimize to Tray",
+            "exit_app": "Exit app",
+        }
+        self.on_close_rev = {v: k for k, v in self.on_close_map.items()}
+        current_oc = behaviour.get("on_close", "minimize_to_tray")
+        self.on_close_var = tk.StringVar(
+            value=self.on_close_map.get(current_oc, "Minimize to Tray")
+        )
+
         # Behaviour - Transparency
         # Limiti: 10–100 per evitare invisibilità
         ta = max(10, min(100, int(behaviour.get("transparency_active", 100))))
@@ -148,6 +239,66 @@ class OptionsForm(tk.Toplevel):
 
         self.transparency_active_var = tk.IntVar(value=ta)
         self.transparency_faded_var = tk.IntVar(value=tf)
+
+    def _ensure_theme_bucket(self, key):
+        bucket = self.temp_config.setdefault(key, {})
+        bucket.setdefault("bg", "#f0f0f0" if key == "theme" else "#1e1f22")
+        bucket.setdefault("panel", "#e4e6ea" if key == "theme" else "#2a2e35")
+        bucket.setdefault("fg", "#101010" if key == "theme" else "#d8d8d8")
+        bucket.setdefault("picture", None)
+        return bucket
+
+    def _sync_theme_vars_to_bucket(self, key):
+        bucket = self._ensure_theme_bucket(key)
+        bucket["bg"] = self.bg_color_var.get().strip() or bucket.get("bg", "#f0f0f0")
+        bucket["fg"] = self.fg_color_var.get().strip() or bucket.get("fg", "#101010")
+        bucket["panel"] = self.panel_color_var.get().strip() or bucket.get("panel", bucket.get("bg", "#f0f0f0"))
+        picture_val = self.bg_picture_var.get().strip()
+        bucket["picture"] = picture_val if picture_val else None
+
+    def _load_theme_vars_from_bucket(self, key):
+        bucket = self._ensure_theme_bucket(key)
+        self.bg_color_var.set(bucket.get("bg", "#f0f0f0"))
+        self.fg_color_var.set(bucket.get("fg", "#101010"))
+        self.panel_color_var.set(bucket.get("panel", bucket.get("bg", "#f0f0f0")))
+        self.bg_picture_var.set(bucket.get("picture") or "")
+        self.bg_color_preview.configure(bg=self.bg_color_var.get())
+        self.fg_color_preview.configure(bg=self.fg_color_var.get())
+        self.panel_color_preview.configure(bg=self.panel_color_var.get())
+
+    def _on_dark_mode_toggle(self):
+        self._sync_theme_vars_to_bucket(self._current_theme_key)
+        self._current_theme_key = "dark_theme" if self.dark_mode_var.get() else "theme"
+        self._load_theme_vars_from_bucket(self._current_theme_key)
+        self.temp_config["dark_theme_enabled"] = bool(self.dark_mode_var.get())
+        self.config["dark_theme_enabled"] = bool(self.dark_mode_var.get())
+        self._apply_current_theme_to_form()
+        if callable(self.on_theme_toggle):
+            self.on_theme_toggle()
+
+    def _apply_current_theme_to_form(self):
+        theme = get_active_theme(self.config)
+        bg = theme.get("bg", "#f0f0f0")
+        panel = theme.get("panel", bg)
+        fg = theme.get("fg", "#101010")
+
+        # Tk widgets
+        apply_theme_colors(self, self.config)
+        apply_background_picture(self, self.config)
+
+        # ttk widgets (OptionsForm uses many ttk controls)
+        style = ttk.Style(self)
+        style.configure("TFrame", background=panel)
+        style.configure("TLabel", background=panel, foreground=fg)
+        style.configure("TLabelframe", background=panel, foreground=fg)
+        style.configure("TLabelframe.Label", background=panel, foreground=fg)
+        style.configure("TCheckbutton", background=panel, foreground=fg)
+        style.configure("TButton", background=panel, foreground=fg)
+        # Do not force foreground on ttk input widgets:
+        # on some Windows themes fieldbackground stays light, making light text unreadable.
+        style.configure("TEntry", fieldbackground=panel)
+        style.configure("TCombobox", fieldbackground=panel)
+        style.map("TCombobox", fieldbackground=[("readonly", panel)])
 
     def _validate_percent(self, value_if_allowed):
         """Ritorna True solo se il valore è un intero 0–100."""
@@ -276,6 +427,45 @@ class OptionsForm(tk.Toplevel):
         )
         self.fg_color_preview.grid(row=4, column=3, sticky="w", padx=(0, pad), pady=(pad, pad))
 
+        # Panel - Colour
+        panel_colour_label = ttk.Label(appearance_frame, text="Panel:", font=default_font)
+        panel_colour_label.grid(row=5, column=0, sticky="e", padx=(pad, pad), pady=(0, pad))
+
+        self.panel_color_entry = ttk.Entry(
+            appearance_frame,
+            textvariable=self.panel_color_var,
+            justify="center",
+            font=default_font,
+            width=10,
+        )
+        self.panel_color_entry.grid(row=5, column=1, sticky="we", padx=(0, pad), pady=(0, pad))
+
+        self.panel_color_button = ttk.Button(
+            appearance_frame,
+            text=">>",
+            width=3,
+            command=self._pick_panel_color
+        )
+        self.panel_color_button.grid(row=5, column=2, sticky="w", padx=(0, pad), pady=(0, pad))
+
+        self.panel_color_preview = tk.Label(
+            appearance_frame,
+            width=self._s(2),
+            height=1,
+            bg=self.panel_color_var.get(),
+            relief="solid",
+            bd=1,
+        )
+        self.panel_color_preview.grid(row=5, column=3, sticky="w", padx=(0, pad), pady=(0, pad))
+
+        self.dark_mode_check = ttk.Checkbutton(
+            appearance_frame,
+            text="Dark mode",
+            variable=self.dark_mode_var,
+            command=self._on_dark_mode_toggle,
+        )
+        self.dark_mode_check.grid(row=6, column=0, columnspan=2, sticky="w", padx=(pad, pad), pady=(0, pad))
+
         # ------------------------------------------------------------------ #
         #  BEHAVIOUR
         # ------------------------------------------------------------------ #
@@ -306,13 +496,26 @@ class OptionsForm(tk.Toplevel):
         )
         self.oa_combobox.grid(row=1, column=1, columnspan=2, sticky="we", padx=(0, pad), pady=(pad, 0))
 
+        # On Close
+        oc_label = ttk.Label(behaviour_frame, text="On Close:", font=default_font)
+        oc_label.grid(row=2, column=0, sticky="e", padx=(pad, pad), pady=(pad, 0))
+
+        self.oc_combobox = ttk.Combobox(
+            behaviour_frame,
+            textvariable=self.on_close_var,
+            values=list(self.on_close_map.values()),
+            state="readonly",
+            font=default_font,
+        )
+        self.oc_combobox.grid(row=2, column=1, columnspan=2, sticky="we", padx=(0, pad), pady=(pad, 0))
+
         # Transparency
         tr_label = ttk.Label(behaviour_frame, text="Transparency:", font=default_font)
-        tr_label.grid(row=2, column=0, sticky="w", padx=(pad, pad), pady=(self._s(10), 0))
+        tr_label.grid(row=3, column=0, sticky="w", padx=(pad, pad), pady=(self._s(10), 0))
 
         # Active
         tr_active_label = ttk.Label(behaviour_frame, text="Active:", font=default_font)
-        tr_active_label.grid(row=3, column=0, sticky="e", padx=(pad, pad), pady=(pad, 0))
+        tr_active_label.grid(row=4, column=0, sticky="e", padx=(pad, pad), pady=(pad, 0))
 
         self.tr_active_spin = tk.Spinbox(
             behaviour_frame,
@@ -323,14 +526,14 @@ class OptionsForm(tk.Toplevel):
             justify="right",
             font=default_font,
         )
-        self.tr_active_spin.grid(row=3, column=1, sticky="w", padx=(0, 0), pady=(pad, 0))
+        self.tr_active_spin.grid(row=4, column=1, sticky="w", padx=(0, 0), pady=(pad, 0))
 
         tr_active_pct = ttk.Label(behaviour_frame, text="%", font=default_font)
-        tr_active_pct.grid(row=3, column=2, sticky="w", padx=(self._s(4), 0), pady=(pad, 0))
+        tr_active_pct.grid(row=4, column=2, sticky="w", padx=(self._s(4), 0), pady=(pad, 0))
 
         # Faded
         tr_faded_label = ttk.Label(behaviour_frame, text="Faded:", font=default_font)
-        tr_faded_label.grid(row=4, column=0, sticky="e", padx=(pad, pad), pady=(pad, pad))
+        tr_faded_label.grid(row=5, column=0, sticky="e", padx=(pad, pad), pady=(pad, pad))
 
         self.tr_faded_spin = tk.Spinbox(
             behaviour_frame,
@@ -341,10 +544,10 @@ class OptionsForm(tk.Toplevel):
             justify="right",
             font=default_font,
         )
-        self.tr_faded_spin.grid(row=4, column=1, sticky="w", padx=(0, 0), pady=(pad, pad))
+        self.tr_faded_spin.grid(row=5, column=1, sticky="w", padx=(0, 0), pady=(pad, pad))
 
         tr_faded_pct = ttk.Label(behaviour_frame, text="%", font=default_font)
-        tr_faded_pct.grid(row=4, column=2, sticky="w", padx=(self._s(4), 0), pady=(pad, pad))
+        tr_faded_pct.grid(row=5, column=2, sticky="w", padx=(self._s(4), 0), pady=(pad, pad))
 
         # ------------------------------------------------------------------ #
         #  BUTTONS
@@ -375,6 +578,14 @@ class OptionsForm(tk.Toplevel):
             hex_color = color[1]
             self.fg_color_var.set(hex_color)
             self.fg_color_preview.configure(bg=hex_color)
+
+    def _pick_panel_color(self):
+        initial = self.panel_color_var.get() or "#e4e6ea"
+        color = colorchooser.askcolor(color=initial, parent=self)
+        if color and color[1]:
+            hex_color = color[1]
+            self.panel_color_var.set(hex_color)
+            self.panel_color_preview.configure(bg=hex_color)
 
     # --------------------------------------------------------------------- #
     #  PICTURE PICKER
@@ -428,14 +639,11 @@ class OptionsForm(tk.Toplevel):
 
     def _on_ok(self):
         # Aggiorna temp_config con i valori delle variabili
-        theme = self.temp_config.setdefault("theme", {})
+        self._sync_theme_vars_to_bucket(self._current_theme_key)
         behaviour = self.temp_config.setdefault("behaviour", {})
 
         # Appearance
-        theme["bg"] = self.bg_color_var.get().strip() or "#f0f0f0"
-        theme["fg"] = self.fg_color_var.get().strip() or "#101010"
-        picture_val = self.bg_picture_var.get().strip()
-        theme["picture"] = picture_val if picture_val else None
+        self.temp_config["dark_theme_enabled"] = bool(self.dark_mode_var.get())
 
         # Behaviour
         ofl_display = self.on_focus_loss_var.get()
@@ -443,6 +651,9 @@ class OptionsForm(tk.Toplevel):
 
         oa_display = self.on_apply_var.get()
         behaviour["on_apply"] = self.on_apply_rev.get(oa_display, "keep_visible")
+
+        oc_display = self.on_close_var.get()
+        behaviour["on_close"] = self.on_close_rev.get(oc_display, "minimize_to_tray")
 
         # Trasparenze (clamp 10–100 per sicurezza)
         ta = max(10, min(100, int(self.transparency_active_var.get())))
@@ -460,6 +671,9 @@ class OptionsForm(tk.Toplevel):
 
     def _on_cancel(self):
         # Nessuna modifica, nessun salvataggio
+        self.config["dark_theme_enabled"] = self._initial_dark_mode_enabled
+        if callable(self.on_theme_toggle):
+            self.on_theme_toggle()
         self.destroy()
 
 
