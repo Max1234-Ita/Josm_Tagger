@@ -4,7 +4,7 @@ import json
 import time
 import tkinter as tk
 import tkinter.ttk as ttk
-import threading
+
 import keyboard
 # ---------------------------------------------------------------------------
 # NOTE SU PYSTRAY (IMPORTANTE)
@@ -29,7 +29,6 @@ import keyboard
 import pystray
 
 from PIL import Image
-from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
@@ -37,7 +36,7 @@ from effects import TransparencyFader, get_active_theme, apply_theme_colors, app
 from josm_interface import send_tags
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
-
+from forms.search_form import SearchForm
 
 
 def resource_path(relative_path):
@@ -129,7 +128,6 @@ class MainForm:
         self.root.bind("<Configure>", self._on_main_configure, add="+")
 
         # X → minimizza nella tray
-        # self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
         self.root.protocol("WM_DELETE_WINDOW", self._on_main_window_close)
 
         # --- WINDOW FADING ---
@@ -141,15 +139,14 @@ class MainForm:
         self.root.after(500, lambda: setattr(self, "allow_focus_out", True))
         self._is_faded = False
 
-        # self.fader = TransparencyFader(self.root)
         self.fader = TransparencyFader(self)
 
         # Track send() state
         self._sending_in_progress = False
 
-        # # Bind focus events
-        # self.root.bind("<FocusIn>", self._on_focus_in)
-        # self.root.bind("<FocusOut>", self._on_focus_out)
+        # Keyboard shortcuts
+        self.root.bind("<Control-f>", self.open_search)
+        self.root.bind("<Control-F>", self.open_search)
 
         # --- ISOLATE FOCUS EVENTS (fix doppio FocusIn/Out) ---
         # Rimuove i binding di classe Toplevel e 'all' per FocusIn/Out
@@ -325,6 +322,7 @@ class MainForm:
 
         edit_menu = tk.Menu(self.menubar, tearoff=0)
         edit_menu.add_command(label="Tags & Codes", command=self.open_editor)
+        edit_menu.add_command(label="Search", command=self.open_search, accelerator="Ctrl+F")
         edit_menu.add_separator()
         edit_menu.add_command(label="Preferences", command=self.open_preferences)
 
@@ -1132,6 +1130,10 @@ class MainForm:
         )
         self._preferences_form.protocol("WM_DELETE_WINDOW", self._on_preferences_close)
 
+    def open_search(self, event=None):
+        from forms.search_form import SearchForm
+        SearchForm(self, self.codes, self.config)
+
     def _apply_runtime_theme(self):
         active = get_active_theme(self.config)
         self.bg_color = active.get("bg", "#2b2b2b")
@@ -1296,22 +1298,6 @@ class MainForm:
         except:
             pass
 
-    # def _on_focus_in(self, event=None):
-    #
-    #     # se un fade-out è in corso, NON interrompere
-    #     if self._fade_in_progress:
-    #         return
-    #
-    #     beh = self.config.get("behaviour", {})
-    #     target = beh.get("transparency_active", 100) / 100
-    #     duration = int(beh.get("fade_duration_ms", 300))
-    #
-    #     self.fader.fade(
-    #         start_alpha=float(self.root.attributes("-alpha")),
-    #         end_alpha=target,
-    #         duration_ms=duration
-    #     )
-
     def _on_focus_in(self, event=None):
         """Fade-in solo quando necessario, con debounce."""
 
@@ -1345,40 +1331,6 @@ class MainForm:
             end_alpha=target,
             duration_ms=duration
         )
-
-    # def _on_focus_out(self, event=None):
-    #     print(f"FOCUS OUT TRIGGERED. Event: '{event}")
-    #
-    #     # # blocca durante avvio
-    #     # if not self.allow_focus_out:
-    #     #     return
-    #
-    #     # blocca durante invio
-    #     if self._sending_in_progress or self._fade_in_progress or not self.allow_focus_out:
-    #         print('Focus Out prevented')
-    #         return
-    #
-    #     # # blocca se un fade è già in corso
-    #     # if self._fade_in_progress:
-    #     #     return
-    #
-    #     # se il focus è ancora dentro la finestra, non è perdita reale
-    #     w = self.root.focus_get()
-    #     if w is not None and str(w).startswith(str(self.root)):
-    #         return
-    #
-    #     # avvia fade-out
-    #     self._fade_in_progress = True
-    #
-    #     start_alpha = float(self.root.attributes("-alpha"))
-    #     beh = self.config.get("behaviour", {})
-    #     target = beh.get("transparency_faded", 35) / 100
-    #     duration = int(beh.get("fade_duration_ms", 300))
-    #     self.fader.fade(
-    #         start_alpha=start_alpha,
-    #         end_alpha=target,
-    #         duration_ms=duration
-    #     )
 
     def _on_focus_out(self, event=None):
         """Fade-out solo quando il focus esce DAVVERO dalla finestra, con debounce."""
