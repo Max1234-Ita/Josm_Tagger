@@ -116,13 +116,24 @@ def apply_theme_colors(window, config=None):
     def apply(widget, root_widget=False):
         target_bg = bg if root_widget else panel
         target_fg = fg if root_widget else panel_fg
-        try:
-            widget.configure(bg=target_bg, fg=target_fg)
-        except Exception:
+        
+        # Gestione speciale per Menu
+        if isinstance(widget, tk.Menu):
             try:
-                widget.configure(bg=target_bg)
+                widget.configure(bg=panel, fg=panel_fg, 
+                                 activebackground="#0078d7", activeforeground="white",
+                                 relief="flat")
             except Exception:
                 pass
+        else:
+            try:
+                widget.configure(bg=target_bg, fg=target_fg)
+            except Exception:
+                try:
+                    widget.configure(bg=target_bg)
+                except Exception:
+                    pass
+                    
         for child in widget.winfo_children():
             apply(child, root_widget=False)
 

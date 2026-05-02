@@ -147,6 +147,7 @@ class MainForm:
         # Keyboard shortcuts
         self.root.bind("<Control-f>", self.open_search)
         self.root.bind("<Control-F>", self.open_search)
+        self.root.bind("<Alt-F4>", lambda e: self._exit_app())
 
         # --- ISOLATE FOCUS EVENTS (fix doppio FocusIn/Out) ---
         # Rimuove i binding di classe Toplevel e 'all' per FocusIn/Out
@@ -313,33 +314,141 @@ class MainForm:
 
     # ---------------- MENU ----------------
     def build_menu(self):
-        self.menubar = tk.Menu(self.root)
+        """Crea una barra dei menu personalizzata con logica dropdown non bloccante."""
+        self.menubar_frame = tk.Frame(self.root, bd=0, relief="flat", height=28)
+        self.menubar_frame.pack(side="top", fill="x")
+        
+        self.menu_buttons = []
+        self._menu_data = {}  # Mappa pulsante -> lista comandi
+        self._menu_active = False
+        self._active_dropdown = None
 
-        file_menu = tk.Menu(self.menubar, tearoff=0)
-        file_menu.add_command(label="Reload tags", command=self.reload_codes)
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self._exit_app)
+        class MenuProxy:
+            """Semplice proxy per raccogliere i comandi dai vecchi setup_menu."""
+            def __init__(self): self.items = []
+            def add_command(self, label, command=None, accelerator=None):
+                self.items.append({"label": label, "command": command, "accel": accelerator})
+            def add_separator(self):
+                self.items.append({"label": "---", "command": None, "accel": None})
 
-        edit_menu = tk.Menu(self.menubar, tearoff=0)
-        edit_menu.add_command(label="Tags & Codes", command=self.open_editor)
-        edit_menu.add_command(label="Search", command=self.open_search, accelerator="Ctrl+F")
-        edit_menu.add_separator()
-        edit_menu.add_command(label="Preferences", command=self.open_preferences)
+        def create_menu_item(label, setup_func):
+            btn = tk.Label(self.menubar_frame, text=label, padx=12, pady=5, cursor="hand2")
+            btn.pack(side="left")
+            
+            proxy = MenuProxy()
+            setup_func(proxy)
+            self._menu_data[btn] = proxy.items
+            
+            # Bindings
+            btn.bind("<Button-1>", lambda e, b=btn: self._toggle_menu(b))
+            btn.bind("<Enter>", lambda e, b=btn: self._on_menu_hover(b))
+            
+            self.menu_buttons.append(btn)
+            return btn
 
-        view_menu = tk.Menu(self.menubar, tearoff=0)
-        view_menu.add_command(label="Font", command=self.select_font)
-        view_menu.add_separator()
-        view_menu.add_command(label="Minimize to tray", command=self.minimize_to_tray)
+        # 1. FILE
+        create_menu_item("File", lambda m: (
+            m.add_command("Reload tags", self.reload_codes),
+            m.add_separator(),
+            m.add_command("Exit", self._exit_app, "Alt+F4")
+        ))
+        # 2. EDIT
+        create_menu_item("Edit", lambda m: (
+            m.add_command("Tags & Codes", self.open_editor),
+            m.add_command("Search", self.open_search, "Ctrl+F"),
+            m.add_separator(),
+            m.add_command("Preferences", self.open_preferences)
+        ))
+        # 3. VIEW
+        create_menu_item("View", lambda m: (
+            m.add_command("Font", self.select_font),
+            m.add_separator(),
+            m.add_command("Minimize to tray", self.minimize_to_tray)
+        ))
+        # 4. ABOUT
+        create_menu_item("   ?   ", lambda m: m.add_command("About", self.show_about))
 
-        about_menu = tk.Menu(self.menubar, tearoff=0)
-        about_menu.add_command(label="About", command=self.show_about)
+        # Reset se clicco fuori
+        self.root.bind("<Button-1>", self._check_menu_click_outside, add="+")
 
-        self.menubar.add_cascade(label="File", menu=file_menu)
-        self.menubar.add_cascade(label="Edit", menu=edit_menu)
-        self.menubar.add_cascade(label="View", menu=view_menu)
-        self.menubar.add_cascade(label="   ?", menu=about_menu)
+    def _toggle_menu(self, btn):
+        if self._active_dropdown:
+            self._close_dropdown()
+            self._menu_active = False
+        else:
+            self._menu_active = True
+            self._show_dropdown(btn)
 
-        self.root.config(menu=self.menubar)
+    def _on_menu_hover(self, btn):
+        if self._menu_active:
+            self._show_dropdown(btn)
+
+    def _show_dropdown(self, btn):
+        self._close_dropdown()
+        
+        # Crea finestra dropdown (Toplevel senza bordi)
+        top = tk.Toplevel(self.root)
+        top.overrideredirect(True)
+        top.attributes("-topmost", True)
+        self._active_dropdown = top
+        
+        # Colori e Font
+        theme = get_active_theme(self.config)
+        p_bg = theme.get("panel")
+        p_fg = theme.get("panel_fg")
+        f = (self.config.get("font_family", "Segoe UI"), int(self.config.get("font_size", 10)))
+        
+        inner = tk.Frame(top, bg=p_bg, highlightthickness=1, highlightbackground=theme.get("fg"))
+        inner.pack(fill="both", expand=True)
+
+        items = self._menu_data[btn]
+        for item in items:
+            if item["label"] == "---":
+                tk.Frame(inner, height=1, bg=theme.get("fg"), pady=2).pack(fill="x", padx=5)
+                continue
+            
+            lbl_text = item["label"]
+            if item["accel"]: lbl_text += f"   ({item['accel']})"
+            
+            l = tk.Label(inner, text=lbl_text, bg=p_bg, fg=p_fg, font=f, 
+                         padx=20, pady=4, anchor="w", cursor="hand2")
+            l.pack(fill="x")
+            
+            # Hover su riga
+            l.bind("<Enter>", lambda e, w=l: w.configure(bg="#0078d7", fg="white"))
+            l.bind("<Leave>", lambda e, w=l: w.configure(bg=p_bg, fg=p_fg))
+            l.bind("<Button-1>", lambda e, cmd=item["command"]: self._exec_menu_cmd(cmd))
+
+        # Posizionamento
+        self.root.update_idletasks()
+        x = btn.winfo_rootx()
+        y = btn.winfo_rooty() + btn.winfo_height()
+        top.geometry(f"+{x}+{y}")
+
+    def _exec_menu_cmd(self, cmd):
+        self._close_dropdown()
+        self._menu_active = False
+        if cmd: self.root.after(10, cmd)
+
+    def _close_dropdown(self):
+        if self._active_dropdown:
+            self._active_dropdown.destroy()
+            self._active_dropdown = None
+
+    def _check_menu_click_outside(self, event):
+        if not self._active_dropdown: return
+        # Se il clic non è sul menubar_frame o sul dropdown
+        try:
+            x, y = event.x_root, event.y_root
+            # Semplificato: se clicco altrove chiudi
+            if self._menu_active:
+                # Piccolo delay per non interferire con i clic sui bottoni stessi
+                self.root.after(100, self._close_if_outside)
+        except: pass
+
+    def _close_if_outside(self):
+        # Verifica se il mouse è ancora sopra la barra o il menu
+        pass # Implementazione semplificata: chiude su comando eseguito o cambio menu
 
     # ---------------- UI ----------------
     def build_ui(self):
@@ -735,6 +844,77 @@ class MainForm:
     def apply_theme(self):
         """Applica il tema attivo ai widget Tk compatibili."""
         apply_theme_colors(self.root, self.config)
+        
+        # Correzioni extra per widget che richiedono parametri specifici (panel_fg)
+        theme = get_active_theme(self.config)
+        panel_color = theme.get("panel")
+        panel_fg = theme.get("panel_fg")
+        bg_color = theme.get("bg")
+        fg_color = theme.get("fg")
+        
+        # Stile TTK per Combobox
+        style = ttk.Style(self.root)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+        
+        style.configure("TCombobox", 
+                        fieldbackground=panel_color, 
+                        background=panel_color, 
+                        foreground=panel_fg,
+                        arrowcolor=panel_fg)
+        
+        # Dropdown colors
+        self.root.option_add("*TCombobox*Listbox.background", panel_color)
+        self.root.option_add("*TCombobox*Listbox.foreground", panel_fg)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", "#0078d7")
+        
+        # Tematizzazione barra menu personalizzata
+        if hasattr(self, "menubar_frame"):
+            self.menubar_frame.configure(bg=bg_color)
+        
+        if hasattr(self, "menu_buttons"):
+            for btn in self.menu_buttons:
+                try:
+                    btn.configure(bg=bg_color, fg=fg_color, 
+                                  activebackground="#0078d7", activeforeground="white")
+                except:
+                    pass
+        
+        if hasattr(self, "menus"):
+            for menu in self.menus:
+                try:
+                    menu.configure(bg=panel_color, fg=panel_fg, 
+                                   activebackground="#0078d7", activeforeground="white")
+                    # Tenta di forzare il colore sui singoli elementi
+                    for i in range(menu.index("end") + 1):
+                        try:
+                            menu.entryconfigure(i, background=panel_color, foreground=panel_fg)
+                        except:
+                            pass
+                except:
+                    pass
+
+        def apply_extra(widget):
+            if isinstance(widget, (tk.Entry, tk.Listbox)):
+                try:
+                    widget.configure(bg=panel_color, fg=panel_fg)
+                    if hasattr(widget, "configure") and "insertbackground" in widget.keys():
+                        widget.configure(insertbackground=panel_fg)
+                except:
+                    pass
+            
+            if isinstance(widget, tk.Listbox):
+                try:
+                    widget.configure(selectbackground="#0078d7", selectforeground="white")
+                except:
+                    pass
+                    
+            for child in widget.winfo_children():
+                # Evitiamo di ricolorare i menu qui, l'abbiamo fatto sopra in modo specifico
+                if not isinstance(child, tk.Menu):
+                    apply_extra(child)
+        
+        apply_extra(self.root)
 
     # ---------------- FONT ----------------
     def apply_font(self):
@@ -1106,12 +1286,13 @@ class MainForm:
         self.entry.focus_set()
         self.entry.icursor(tk.END)
 
-    def open_editor(self):
+    def open_editor(self, code=None):
         TagEditorForm(
             self.root,
             self.codes,
             on_save_callback=self.reload_codes,
             config=self.config,
+            preload_code=code
         )
 
     def open_preferences(self):

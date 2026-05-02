@@ -401,12 +401,11 @@ class SearchForm:
             return
         code = sel[0]
         try:
-            if hasattr(self.mainform, "open_tag_editor"):
-                self.mainform.open_tag_editor(code)
-            elif hasattr(self.mainform, "open_editor"):
+            # Chiama l'editor sulla mainform passando il codice selezionato
+            if hasattr(self.mainform, "open_editor"):
                 self.mainform.open_editor(code)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"DEBUG: Error opening editor from search: {e}")
 
     # ---------------- USE / CLOSE ----------------
     def _use_code(self, code: str):
