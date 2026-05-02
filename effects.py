@@ -17,6 +17,7 @@ def get_active_theme(config=None):
         "bg": bg,
         "panel": theme.get("panel", bg),
         "fg": theme.get("fg", "#101010"),
+        "panel_fg": theme.get("panel_fg", theme.get("fg", "#101010")),
         "picture": theme.get("picture"),
     }
 
@@ -110,11 +111,13 @@ def apply_theme_colors(window, config=None):
     bg = theme.get("bg", "#f0f0f0")
     panel = theme.get("panel", bg)
     fg = theme.get("fg", "#101010")
+    panel_fg = theme.get("panel_fg", fg)
 
     def apply(widget, root_widget=False):
         target_bg = bg if root_widget else panel
+        target_fg = fg if root_widget else panel_fg
         try:
-            widget.configure(bg=target_bg, fg=fg)
+            widget.configure(bg=target_bg, fg=target_fg)
         except Exception:
             try:
                 widget.configure(bg=target_bg)

@@ -1,6 +1,9 @@
 import tkinter as tk
 from tkinter import ttk
 from typing import Dict, List, Any, Optional, Tuple
+import os
+import sys
+from effects import get_active_theme, apply_theme_colors, apply_background_picture
 
 
 def _clamp_to_monitor(window: tk.Toplevel, x: int, y: int) -> Tuple[int, int]:
@@ -56,20 +59,40 @@ class SearchForm:
         else:
             self.root = tk.Toplevel(master)
 
-        self.root.title("Search Codes")
+        self.root.title("Search")
+        
+        # Carica configurazione e tema
+        self.theme = get_active_theme(self.config)
+        self.bg_color = self.theme.get("bg", "#f0f0f0")
+        self.fg_color = self.theme.get("fg", "#101010")
+        self.panel_color = self.theme.get("panel", self.bg_color)
+        self.panel_fg = self.theme.get("panel_fg", self.fg_color)
+        
+        self.root.configure(bg=self.bg_color)
+        
+        # Applica Scala UI e Font
+        self._apply_ui_scaling()
+
+        # Applica Minsize scalata
+        scale = float(self.config.get("ui_scale", 1.0))
+        self.root.minsize(int(620 * scale), int(500 * scale))
+
+        # Applica Icona (Windows/Linux)
+        self._apply_icon()
+        
         try:
             self.root.attributes("-topmost", True)
         except Exception:
             pass
-
-        # font placeholder (se la mainform fornisce un font, usalo)
-        self._font = getattr(self.mainform, "_font", None)
 
         # UI state
         self.filtered: List[str] = []
 
         # costruisci UI
         self._build_ui()
+
+        # Applica tema e immagine di sfondo
+        self.apply_theme()
 
         # popolamento iniziale
         self._update_results()
@@ -83,188 +106,174 @@ class SearchForm:
         self.root.protocol("WM_DELETE_WINDOW", self._close)
         self.root.focus_force()
 
+    def _apply_ui_scaling(self):
+        """Applica la scala UI e il font configurato."""
+        family = self.config.get("font_family", "Calibri")
+        size = int(self.config.get("font_size", 11))
+        scale = float(self.config.get("ui_scale", 1.0))
+        
+        scaled_size = int(size * scale)
+        self._font = (family, scaled_size)
+        
+        # Applica scaling a livello di Tk se possibile
+        try:
+            self.root.tk.call('tk', 'scaling', scale * 1.33) # 1.33 è il fattore tipico per 96 DPI
+        except:
+            pass
+
+    def _apply_icon(self):
+        """Applica l'icona alla finestra (ICO per Windows, PNG per Linux)."""
+        try:
+            # Risoluzione percorso base (compatibile con PyInstaller)
+            base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+            
+            if sys.platform.startswith("win"):
+                icon_path = os.path.join(base_path, "resources", "josm_tagger.ico")
+                if os.path.exists(icon_path):
+                    self.root.iconbitmap(icon_path)
+            else:
+                icon_path = os.path.join(base_path, "resources", "josm_tagger.png")
+                if os.path.exists(icon_path):
+                    img = tk.PhotoImage(file=icon_path)
+                    self.root.iconphoto(True, img)
+        except Exception as e:
+            print(f"DEBUG: Could not set icon: {e}")
+
+    def apply_theme(self):
+        """Applica i colori del tema e l'immagine di sfondo."""
+        apply_theme_colors(self.root, self.config)
+        apply_background_picture(self.root, self.config)
+        
+        # Correzioni specifiche per ttk
+        style = ttk.Style(self.root)
+        style.configure("Search.Treeview", 
+                        background=self.panel_color, 
+                        fieldbackground=self.panel_color, 
+                        foreground=self.panel_fg)
+        style.map("Search.Treeview", 
+                  background=[('selected', '#0078d7')], 
+                  foreground=[('selected', 'white')])
+
     # ---------------- UI BUILD ----------------
     def _build_ui(self):
-        """Costruisce l'interfaccia completa."""
+        """Costruisce l'interfaccia completa secondo il mockup."""
         # stile per la treeview
         style = ttk.Style(self.root)
+        style.theme_use("clam")
         try:
+            style.configure("Search.Treeview", rowheight=int(25 * float(self.config.get("ui_scale", 1.0))))
             if self._font:
-                style.configure("Search.Treeview", rowheight=20, font=self._font)
+                style.configure("Search.Treeview", font=self._font)
                 style.configure("Search.Treeview.Heading", font=self._font)
-            else:
-                style.configure("Search.Treeview", rowheight=20)
         except Exception:
-            style.configure("Search.Treeview", rowheight=20)
+            pass
 
-        # TOP: search + filters
-        top = tk.Frame(self.root)
-        top.pack(fill="x", padx=6, pady=6)
+        # Container principale con padding
+        main_container = tk.Frame(self.root, bg=self.bg_color)
+        main_container.pack(fill="both", expand=True, padx=10, pady=10)
 
-        tk.Label(top, text="Search:").pack(side="left")
+        # 1. ISTRUZIONI
+        instr_text = "Search for any code, key, or value; Right-click any item in the results list for more options"
+        self.instructions = tk.Label(main_container, text=instr_text, justify="left", 
+                                     bg=self.bg_color, fg=self.fg_color, font=self._font,
+                                     wraplength=500)
+        self.instructions.pack(fill="x", pady=(0, 10))
+        
+        # Aggiorna wraplength dinamicamente
+        def _update_wrap(event):
+            self.instructions.config(wraplength=event.width - 20)
+        main_container.bind("<Configure>", _update_wrap)
+
+        # 2. AREA RICERCA E FILTRI
+        search_area = tk.Frame(main_container, bg=self.bg_color)
+        search_area.pack(fill="x", pady=(0, 15))
+
+        tk.Label(search_area, text="Search for:", bg=self.bg_color, fg=self.fg_color, font=self._font).pack(side="left")
 
         self.query_var = tk.StringVar()
         self.query_var.trace_add("write", lambda *_: self._update_results())
 
-        self.entry = tk.Entry(top, textvariable=self.query_var)
-        self.entry.pack(side="left", fill="x", expand=True, padx=(4, 4))
+        self.entry = tk.Entry(search_area, textvariable=self.query_var, bg=self.panel_color, fg=self.panel_fg,
+                              relief="solid", borderwidth=1, font=self._font, insertbackground=self.panel_fg)
+        self.entry.pack(side="left", fill="x", expand=True, padx=(10, 20))
 
-        # filtri
+        # Filtri
+        filter_frame = tk.Frame(search_area, bg=self.bg_color)
+        filter_frame.pack(side="left")
+        
+        tk.Label(filter_frame, text="Filters:", bg=self.bg_color, fg=self.fg_color, font=self._font).pack(side="left", padx=(0, 5))
+
         self.filter_codes = tk.BooleanVar(value=True)
         self.filter_keys = tk.BooleanVar(value=True)
         self.filter_values = tk.BooleanVar(value=True)
 
-        tk.Checkbutton(top, text="Codes", variable=self.filter_codes,
-                       command=self._update_results).pack(side="left", padx=4)
-        tk.Checkbutton(top, text="Keys", variable=self.filter_keys,
-                       command=self._update_results).pack(side="left", padx=4)
-        tk.Checkbutton(top, text="Values", variable=self.filter_values,
-                       command=self._update_results).pack(side="left", padx=4)
+        for text, var in [("Codes", self.filter_codes), ("Keys", self.filter_keys), ("Values", self.filter_values)]:
+            tk.Checkbutton(filter_frame, text=text, variable=var, bg=self.bg_color, fg=self.fg_color,
+                           selectcolor=self.panel_color, activebackground=self.bg_color, activeforeground=self.fg_color,
+                           command=self._update_results, font=self._font).pack(side="left", padx=2)
 
-        # Paned principale (centro)
-        self.paned = tk.PanedWindow(self.root, orient="horizontal", sashrelief="raised")
-        self.paned.pack(fill="both", expand=True, padx=6, pady=6)
+        # 3. PANNELLI CENTRALI
+        self.paned = tk.PanedWindow(main_container, orient="horizontal", bg=self.bg_color, 
+                                    sashwidth=4, sashrelief="flat")
+        self.paned.pack(fill="both", expand=True)
 
-        # LEFT: risultati
-        left = tk.Frame(self.paned)
-        self.paned.add(left, minsize=250)
+        # LEFT: Results
+        self.results_lf = tk.LabelFrame(self.paned, text="Results", bg=self.bg_color, fg=self.fg_color, font=self._font, padx=5, pady=5)
+        self.paned.add(self.results_lf, minsize=300)
 
-        # container per tree + scrollbar
-        container = tk.Frame(left)
-        container.pack(fill="both", expand=True)
+        tree_container = tk.Frame(self.results_lf, bg=self.panel_color, borderwidth=1, relief="solid")
+        tree_container.pack(fill="both", expand=True)
 
-        # tree_frame contiene canvas (griglia) e tree
-        tree_frame = tk.Frame(container)
-        tree_frame.grid(row=0, column=0, sticky="nsew")
-
-        self._results_frame = tree_frame
-
-        # canvas per la griglia (posizionato dentro tree_frame)
-        self._grid_canvas = tk.Canvas(tree_frame, highlightthickness=0, bd=0)
-        self._grid_canvas.grid(row=0, column=0, sticky="nsew")
-
-        # Treeview con due colonne
-        self.tree = ttk.Treeview(tree_frame, columns=("code", "tags"), show="headings",
+        self.tree = ttk.Treeview(tree_container, columns=("code", "tags"), show="headings",
                                  style="Search.Treeview")
         self.tree.heading("code", text="Code")
-        self.tree.column("code", width=150, minwidth=100, anchor="w", stretch=False)
+        self.tree.column("code", width=100, minwidth=60, anchor="w", stretch=False)
         self.tree.heading("tags", text="Tags")
         self.tree.column("tags", width=400, minwidth=100, anchor="w", stretch=True)
 
-        # scrollbar (posizionate nel container per evitare sovrapposizioni)
-        vsb = ttk.Scrollbar(container, orient="vertical", command=self.tree.yview)
-        hsb = ttk.Scrollbar(container, orient="horizontal", command=self.tree.xview)
+        # Usiamo tk.Scrollbar invece di ttk.Scrollbar per uniformità con main_form
+        vsb = tk.Scrollbar(tree_container, orient="vertical", command=self.tree.yview)
+        hsb = tk.Scrollbar(self.results_lf, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
-        # assegna scrollcommand che ridisegna la griglia
-        self.tree.configure(yscrollcommand=lambda *a: (vsb.set(*a), self._draw_grid()),
-                            xscrollcommand=lambda *a: (hsb.set(*a), self._draw_grid()))
-
-        # posizionamento: tree_frame + scrollbar
-        tree_frame.grid(row=0, column=0, sticky="nsew")
-        vsb.grid(row=0, column=1, sticky="ns")
-        hsb.grid(row=1, column=0, sticky="ew")
-
-        # tree sopra il canvas
         self.tree.grid(row=0, column=0, sticky="nsew")
-        try:
-            self._grid_canvas.lower()
-            self.tree.lift()
-        except Exception:
-            pass
+        vsb.grid(row=0, column=1, sticky="ns")
+        tree_container.grid_rowconfigure(0, weight=1)
+        tree_container.grid_columnconfigure(0, weight=1)
+        hsb.pack(fill="x")
 
-        # rendi ridimensionabile
-        container.grid_rowconfigure(0, weight=1)
-        container.grid_columnconfigure(0, weight=1)
-        tree_frame.grid_rowconfigure(0, weight=1)
-        tree_frame.grid_columnconfigure(0, weight=1)
+        # RIGHT: Details
+        self.details_lf = tk.LabelFrame(self.paned, text="Details", bg=self.bg_color, fg=self.fg_color, font=self._font, padx=5, pady=5)
+        self.paned.add(self.details_lf, minsize=200)
 
-        # binding
-        self.tree.bind("<<TreeviewSelect>>", self._on_select)
-        self.tree.bind("<Double-Button-1>", self._on_double_click)
-        self.tree.bind("<Button-3>", self._on_right_click)
-        self.tree.bind("<ButtonRelease-2>", self._on_right_click)
-        self.tree.bind("<Configure>", lambda e: self._draw_grid())
-        self.tree.bind("<Expose>", lambda e: self._draw_grid())
+        details_inner = tk.Frame(self.details_lf, bg=self.panel_color)
+        details_inner.pack(fill="both", expand=True)
 
-        vsb.config(command=lambda *args: (self.tree.yview(*args), self._draw_grid()))
-        hsb.config(command=lambda *args: (self.tree.xview(*args), self._draw_grid()))
-
-        # RIGHT: details
-        right = tk.Frame(self.paned)
-        self.paned.add(right, minsize=200)
-
-        self.details_label = tk.Label(right, text="Details")
-        self.details_label.pack(anchor="w")
-
-        details_container = tk.Frame(right)
-        details_container.pack(fill="both", expand=True)
-
-        self.details = tk.Listbox(details_container)
+        self.details = tk.Listbox(details_inner, bg=self.panel_color, fg=self.panel_fg, 
+                                  relief="solid", borderwidth=1, font=self._font, selectbackground="#0078d7")
         self.details.pack(side="left", fill="both", expand=True)
 
-        vsb2 = ttk.Scrollbar(details_container, orient="vertical", command=self.details.yview)
+        vsb2 = tk.Scrollbar(details_inner, orient="vertical", command=self.details.yview)
         vsb2.pack(side="right", fill="y")
         self.details.configure(yscrollcommand=vsb2.set)
+        
+        # 4. BOTTOM AREA
+        bottom = tk.Frame(main_container, bg=self.bg_color)
+        bottom.pack(fill="x", pady=(10, 0))
 
-        hsb2 = ttk.Scrollbar(right, orient="horizontal", command=self.details.xview)
-        hsb2.pack(fill="x")
-        self.details.configure(xscrollcommand=hsb2.set)
-
-        # BOTTOM: pulsanti (fuori dal paned)
-        bottom = tk.Frame(self.root)
-        bottom.pack(fill="x", side="bottom")
-        bottom.pack_propagate(False)
-
-        btn_frame = tk.Frame(bottom)
-        btn_frame.pack(side="right", padx=6, pady=6)
-
-        self.close_btn = tk.Button(btn_frame, text="Close", command=self._close)
-        self.close_btn.pack(side="right", padx=4)
+        self.close_btn = tk.Button(bottom, text="Close", command=self._close, width=10,
+                                   bg="#e1e1e1", fg="black", relief="raised", borderwidth=1, font=self._font)
+        self.close_btn.pack(side="right")
 
         # context menu
         self.context_menu = tk.Menu(self.root, tearoff=0)
         self.context_menu.add_command(label="Use", command=self._context_use)
         self.context_menu.add_command(label="Edit", command=self._context_edit)
 
-        # funzione per fissare spazio bottom e aggiornare paned padding
-        def _fix_bottom_and_paned():
-            try:
-                self.root.update_idletasks()
-                btn_h = self.close_btn.winfo_reqheight() or 24
-                reserved = max(int(btn_h * 1.2), int(btn_h + 8))
-                bottom.config(height=reserved)
-                try:
-                    self.paned.pack_configure(padx=6, pady=(6, reserved))
-                except Exception:
-                    self.paned.pack_configure(padx=6, pady=reserved)
-                try:
-                    bottom.lift()
-                    bottom.tkraise()
-                except Exception:
-                    pass
-                self.root.update_idletasks()
-                # se necessario, riduci minsize del primo pane
-                try:
-                    ph = self.paned.winfo_height()
-                    rh = bottom.winfo_height()
-                    if ph + rh > self.root.winfo_height():
-                        panes = self.paned.panes()
-                        if panes:
-                            self.paned.paneconfig(panes[0], minsize=max(50, self.root.winfo_height() - rh - 12))
-                except Exception:
-                    pass
-            except Exception:
-                pass
-
-        self.root.after_idle(_fix_bottom_and_paned)
-
-        def _on_root_configure(event):
-            self.root.after(10, _fix_bottom_and_paned)
-
-        self.root.bind("<Configure>", _on_root_configure)
-
-        # disegna griglia iniziale
-        self.root.after_idle(self._draw_grid)
+        # bindings
+        self.tree.bind("<<TreeviewSelect>>", self._on_select)
+        self.tree.bind("<Double-Button-1>", self._on_double_click)
+        self.tree.bind("<Button-3>", self._on_right_click)
 
     # ---------------- RESULTS POPULATION ----------------
     def _update_results(self):
@@ -308,11 +317,6 @@ class SearchForm:
                     self.tree.insert("", "end", values=(code, tag_str))
 
         self.filtered.sort()
-        # assicurati che la griglia venga ridisegnata dopo il popolamento
-        try:
-            self.root.after_idle(self._draw_grid)
-        except Exception:
-            pass
 
     # ---------------- POSITIONING ----------------
     def _place_near_parent_offset(self):
@@ -337,7 +341,7 @@ class SearchForm:
             final_x, final_y = _clamp_to_monitor(self.root, target_x, target_y)
             self.root.geometry(f"+{final_x}+{final_y}")
         except Exception:
-            # fallback: centra sullo schermo
+            # Centra sullo schermo
             try:
                 sw = self.root.winfo_screenwidth()
                 sh = self.root.winfo_screenheight()
@@ -347,66 +351,6 @@ class SearchForm:
             except Exception:
                 pass
 
-    # ------------------ apply minsize for the whole form ------------------
-    def _apply_min_size(self):
-        """
-        Calcola e applica la minsize della toplevel:
-        min_height = topY(results) + height(results) + height(close_btn) + 20px
-        Deve essere chiamato dopo che il layout è stabilizzato (after_idle).
-        """
-        try:
-            # assicurati che il layout sia aggiornato
-            self.root.update_idletasks()
-
-            # riferimento al frame dei risultati (fallback su self.tree)
-            results_widget = getattr(self, "_results_frame", None) or getattr(self, "tree", None)
-            if results_widget is None:
-                return
-
-            # se il widget non è ancora mappato, riprova dopo un breve delay
-            if not results_widget.winfo_ismapped() or results_widget.winfo_height() < 8:
-                try:
-                    self.root.after(80, self._apply_min_size)
-                except Exception:
-                    pass
-                return
-
-            # coordinata Y relativa alla toplevel
-            try:
-                top_y = results_widget.winfo_rooty() - self.root.winfo_rooty()
-            except Exception:
-                top_y = results_widget.winfo_y()
-
-            results_h = results_widget.winfo_height() or 0
-
-            # altezza del pulsante Close (winfo_reqheight per altezza richiesta)
-            try:
-                close_h = getattr(self, "close_btn", None).winfo_reqheight() or 0
-            except Exception:
-                close_h = 0
-
-            # calcola min height
-            min_height = int(top_y + results_h + close_h + 20)
-
-            # larghezza minima: manteniamo l'attuale larghezza richiesta o fallback 400
-            try:
-                current_w = max(self.root.winfo_reqwidth(), 400)
-            except Exception:
-                current_w = 400
-
-            # applica la minsize alla toplevel
-            try:
-                self.root.minsize(current_w, min_height)
-            except Exception:
-                try:
-                    # fallback: imposta geometry minima
-                    self.root.geometry(f"{current_w}x{min_height}")
-                except Exception:
-                    pass
-
-        except Exception:
-            pass
-
     # ---------------- INTERACTIONS ----------------
     def _on_select(self, event=None):
         """Aggiorna il pannello Details con i tag della selezione."""
@@ -414,9 +358,11 @@ class SearchForm:
             sel = self.tree.selection()
             self.details.delete(0, tk.END)
             if not sel:
+                self.details_lf.config(text="Details")
                 return
             iid = sel[0]
             code = iid
+            self.details_lf.config(text=f"{code} - Details")
             tags = self.codes.get(code, [])
             for t in tags:
                 self.details.insert(tk.END, f"{t.get('key','')} = {t.get('value','')}")
@@ -454,7 +400,6 @@ class SearchForm:
         if not sel:
             return
         code = sel[0]
-        # se la mainform ha un metodo per aprire l'editor, chiamalo
         try:
             if hasattr(self.mainform, "open_tag_editor"):
                 self.mainform.open_tag_editor(code)
@@ -467,50 +412,35 @@ class SearchForm:
     def _use_code(self, code: str):
         """Copia il codice nella clipboard, chiude la search e prova a inserirlo nella mainform."""
         try:
-            # copia nella clipboard della toplevel
             try:
                 self.root.clipboard_clear()
                 self.root.clipboard_append(code)
             except Exception:
                 pass
 
-            # chiudi SearchForm
             self._close()
 
-            # porta mainform in primo piano
             try:
                 if hasattr(self.mainform, "deiconify"):
                     self.mainform.deiconify()
                 if hasattr(self.mainform, "lift"):
                     self.mainform.lift()
-                try:
-                    self.mainform.attributes("-topmost", True)
-                    self.mainform.after(50, lambda: self.mainform.attributes("-topmost", False))
-                except Exception:
-                    pass
             except Exception:
                 pass
 
-            # prova a inserire direttamente nella entry della mainform
             try:
                 if hasattr(self.mainform, "entry"):
                     self.mainform.entry.delete(0, tk.END)
                     self.mainform.entry.insert(0, code)
                     self.mainform.entry.focus_force()
                     self.mainform.entry.icursor("end")
-                else:
-                    # fallback: genera evento di incolla se esiste una widget con focus
-                    try:
-                        self.mainform.event_generate("<<Paste>>")
-                    except Exception:
-                        pass
             except Exception:
                 pass
         except Exception:
             pass
 
     def _close(self):
-        """Chiude la finestra SearchForm (senza distruggere l'istanza singleton)."""
+        """Chiude la finestra SearchForm."""
         try:
             if getattr(self, "root", None) and self.root.winfo_exists():
                 try:
@@ -521,83 +451,4 @@ class SearchForm:
                     except Exception:
                         pass
         finally:
-            # non rimuoviamo l'istanza per permettere riaperture rapide
             pass
-
-    # ---------------- GRID DRAW (semplice, robusto) ----------------
-    def _draw_grid(self):
-        """
-        Disegna una griglia semplice sul canvas sottostante alla tree.
-        Se la tree non è ancora mappata, riprova dopo un breve delay.
-        Nota: la griglia è puramente decorativa.
-        """
-        try:
-            tree = self.tree
-            canvas = self._grid_canvas
-
-            # se la tree non è mappata o troppo piccola, riprova
-            if not tree.winfo_ismapped() or tree.winfo_width() < 10 or tree.winfo_height() < 10:
-                try:
-                    self.root.after(80, self._draw_grid)
-                except Exception:
-                    pass
-                return
-
-            tree.update_idletasks()
-            tw = tree.winfo_width()
-            th = tree.winfo_height()
-            if tw <= 2 or th <= 2:
-                try:
-                    self.root.after(80, self._draw_grid)
-                except Exception:
-                    pass
-                return
-
-            # posiziona il canvas esattamente dentro la tree area
-            try:
-                canvas.place(in_=tree, relx=0, rely=0, relwidth=1, relheight=1)
-            except Exception:
-                canvas.config(width=tw, height=th)
-
-            canvas.delete("grid_line")
-            canvas.config(width=tw, height=th)
-
-            # header height approssimato
-            header_h = 24
-            try:
-                header_h = max(20, int(tree.winfo_reqheight() - tree.winfo_height() + 24))
-            except Exception:
-                header_h = 24
-
-            # rowheight dallo style
-            style = ttk.Style(self.root)
-            try:
-                rowheight = int(style.lookup("Search.Treeview", "rowheight") or 20)
-            except Exception:
-                rowheight = 20
-
-            visible_rows = max(1, (th // rowheight) + 2)
-
-            # linee orizzontali
-            for i in range(0, visible_rows + 2):
-                y = header_h + i * rowheight
-                if y <= 0:
-                    continue
-                canvas.create_line(0, y, tw, y, fill="#e6e6e6", tags=("grid_line",), width=1)
-
-            # linee verticali in corrispondenza delle colonne
-            x = 0
-            cols = tree["columns"]
-            for col in cols:
-                col_w = tree.column(col, option="width")
-                x += int(col_w)
-                canvas.create_line(x, 0, x, th, fill="#e6e6e6", tags=("grid_line",), width=1)
-
-            try:
-                self.tree.lift()
-            except Exception:
-                pass
-
-        except Exception:
-            pass
-

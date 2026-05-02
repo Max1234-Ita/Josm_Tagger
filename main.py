@@ -7,6 +7,9 @@ appversion = '0.1.8'
 author = 'By Max1234-ITA, 2026'
 appinfo = f'{appname} v.{appversion}\n- {author} -'  # Full text to use in About
 
+appicon_ico = 'resources/josm_tagger.ico'  # Path to the icon file (relative to the script)
+appicon_png = 'resources/josm_tagger.png'  # Path to the PNG icon file (relative to the script)
+
 # --- Functions ---
 def on_hotkey(app):
     # Activate widget by pressing the Hotkey combination
