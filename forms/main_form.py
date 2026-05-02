@@ -319,12 +319,13 @@ class MainForm:
         self.menubar_frame.pack(side="top", fill="x")
         
         self.menu_buttons = []
-        self._menu_data = {}  # Mappa pulsante -> lista comandi
+        self._menu_data = {}
         self._menu_active = False
         self._active_dropdown = None
+        self._active_button = None
+        self._close_job = None
 
         class MenuProxy:
-            """Semplice proxy per raccogliere i comandi dai vecchi setup_menu."""
             def __init__(self): self.items = []
             def add_command(self, label, command=None, accelerator=None):
                 self.items.append({"label": label, "command": command, "accel": accelerator})
@@ -342,6 +343,7 @@ class MainForm:
             # Bindings
             btn.bind("<Button-1>", lambda e, b=btn: self._toggle_menu(b))
             btn.bind("<Enter>", lambda e, b=btn: self._on_menu_hover(b))
+            btn.bind("<Leave>", lambda e: self._on_menu_leave())
             
             self.menu_buttons.append(btn)
             return btn
@@ -368,11 +370,25 @@ class MainForm:
         # 4. ABOUT
         create_menu_item("   ?   ", lambda m: m.add_command("About", self.show_about))
 
-        # Reset se clicco fuori
+        # Reset se clicco fuori (solo se NON è un widget del menu)
         self.root.bind("<Button-1>", self._check_menu_click_outside, add="+")
 
-    def _toggle_menu(self, btn):
+    def _on_menu_leave(self):
+        """Avvia il timer per la chiusura, ma solo se non siamo già in un'area protetta."""
         if self._active_dropdown:
+            if self._close_job: self.root.after_cancel(self._close_job)
+            # Aumentiamo leggermente il tempo per dare margine di movimento
+            self._close_job = self.root.after(500, self._close_dropdown)
+
+    def _cancel_close(self, e=None):
+        """Annulla qualsiasi operazione di chiusura pendente."""
+        if self._close_job:
+            self.root.after_cancel(self._close_job)
+            self._close_job = None
+
+    def _toggle_menu(self, btn):
+        self._cancel_close() # Protezione immediata
+        if self._active_button == btn:
             self._close_dropdown()
             self._menu_active = False
         else:
@@ -381,25 +397,39 @@ class MainForm:
 
     def _on_menu_hover(self, btn):
         if self._menu_active:
+            self._cancel_close() # Impedisce la chiusura durante il passaggio tra pulsanti
             self._show_dropdown(btn)
 
     def _show_dropdown(self, btn):
+        # Se il menu per questo pulsante è già attivo, basta annullare la chiusura
+        if self._active_button == btn and self._active_dropdown: 
+            self._cancel_close()
+            return
+            
         self._close_dropdown()
+        self._active_button = btn
         
-        # Crea finestra dropdown (Toplevel senza bordi)
+        # Crea finestra dropdown
         top = tk.Toplevel(self.root)
         top.overrideredirect(True)
         top.attributes("-topmost", True)
         self._active_dropdown = top
         
+        # Il menu stesso deve annullare la chiusura quando il mouse ci entra
+        top.bind("<Enter>", self._cancel_close)
+        top.bind("<Leave>", lambda e: self._on_menu_leave())
+
         # Colori e Font
         theme = get_active_theme(self.config)
         p_bg = theme.get("panel")
         p_fg = theme.get("panel_fg")
-        f = (self.config.get("font_family", "Segoe UI"), int(self.config.get("font_size", 10)))
+        f = (self.config.get("font_family", "Calibri"), int(self.config.get("font_size", 10)))
         
         inner = tk.Frame(top, bg=p_bg, highlightthickness=1, highlightbackground=theme.get("fg"))
         inner.pack(fill="both", expand=True)
+        
+        # Binding ricorsivo per annullare la chiusura su ogni parte del menu
+        inner.bind("<Enter>", self._cancel_close)
 
         items = self._menu_data[btn]
         for item in items:
@@ -411,44 +441,57 @@ class MainForm:
             if item["accel"]: lbl_text += f"   ({item['accel']})"
             
             l = tk.Label(inner, text=lbl_text, bg=p_bg, fg=p_fg, font=f, 
-                         padx=20, pady=4, anchor="w", cursor="hand2")
+                         padx=20, pady=6, anchor="w", cursor="hand2")
             l.pack(fill="x")
             
-            # Hover su riga
-            l.bind("<Enter>", lambda e, w=l: w.configure(bg="#0078d7", fg="white"))
+            # Ogni riga annulla attivamente il timer di chiusura
+            l.bind("<Enter>", lambda e, w=l: (self._cancel_close(), w.configure(bg="#0078d7", fg="white")))
             l.bind("<Leave>", lambda e, w=l: w.configure(bg=p_bg, fg=p_fg))
             l.bind("<Button-1>", lambda e, cmd=item["command"]: self._exec_menu_cmd(cmd))
 
-        # Posizionamento
+        # Posizionamento: SOVRAPPOSIZIONE di 2px per eliminare zone morte
         self.root.update_idletasks()
         x = btn.winfo_rootx()
-        y = btn.winfo_rooty() + btn.winfo_height()
+        y = btn.winfo_rooty() + btn.winfo_height() - 2
         top.geometry(f"+{x}+{y}")
+        
+        # Protezione finale: dopo aver mostrato, annulliamo ancora una volta eventuali timer spuri
+        self.root.after(10, self._cancel_close)
 
     def _exec_menu_cmd(self, cmd):
         self._close_dropdown()
         self._menu_active = False
-        if cmd: self.root.after(10, cmd)
+        self._block_focus_out = True
+        if cmd:
+            self.root.after(10, cmd)
+            self.root.after(1000, lambda: setattr(self, "_block_focus_out", False))
 
     def _close_dropdown(self):
         if self._active_dropdown:
-            self._active_dropdown.destroy()
+            try: self._active_dropdown.destroy()
+            except: pass
             self._active_dropdown = None
+        self._active_button = None
+        self._close_job = None
 
     def _check_menu_click_outside(self, event):
-        if not self._active_dropdown: return
-        # Se il clic non è sul menubar_frame o sul dropdown
-        try:
-            x, y = event.x_root, event.y_root
-            # Semplificato: se clicco altrove chiudi
-            if self._menu_active:
-                # Piccolo delay per non interferire con i clic sui bottoni stessi
-                self.root.after(100, self._close_if_outside)
-        except: pass
+        if not self._menu_active: return
+        
+        # Se clicco sulla barra dei menu o sul dropdown, NON chiudere
+        w = event.widget
+        if w in self.menu_buttons or w == self.menubar_frame:
+            return
+            
+        # Verifica se il widget cliccato è all'interno del dropdown attivo
+        if self._active_dropdown:
+            try:
+                if str(w).startswith(str(self._active_dropdown)):
+                    return
+            except: pass
 
-    def _close_if_outside(self):
-        # Verifica se il mouse è ancora sopra la barra o il menu
-        pass # Implementazione semplificata: chiude su comando eseguito o cambio menu
+        # Se siamo qui, il clic è veramente "fuori"
+        self._close_dropdown()
+        self._menu_active = False
 
     # ---------------- UI ----------------
     def build_ui(self):
@@ -490,11 +533,10 @@ class MainForm:
         self.code_list.bind("<Motion>", self._on_list_motion)
         self.code_list.bind("<Leave>", self._on_list_leave)
 
-        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.code_list.yview)
         scrollbar.pack(side="right", fill="y")
         self.code_list.pack(fill="both", expand=True, side="left")
         self.code_list.config(yscrollcommand=scrollbar.set)
-        scrollbar.config(command=self.code_list.yview)
 
         self.code_list.bind("<<ListboxSelect>>", self.update_preview)
         self.code_list.bind("<Double-Button-1>", self.apply_from_list)
@@ -536,11 +578,10 @@ class MainForm:
         preview_inner.pack(fill="both", expand=True)
 
         self.preview = tk.Listbox(preview_inner, height=4)
-        scrollbar_preview = tk.Scrollbar(preview_inner)
+        scrollbar_preview = ttk.Scrollbar(preview_inner, orient="vertical", command=self.preview.yview)
         scrollbar_preview.pack(side="right", fill="y")
         self.preview.pack(fill="both", expand=True, side="left")
         self.preview.config(yscrollcommand=scrollbar_preview.set)
-        scrollbar_preview.config(command=self.preview.yview)
 
         # Make preview read-only to mouse clicks
         self.preview.bind("<Button-1>", lambda e: "break")
@@ -822,7 +863,7 @@ class MainForm:
         if not sel:
             return
         code = self.code_list.get(sel[0])
-        TagEditorForm(self.root, self.codes, preload_code=code)
+        self.open_editor(code)
 
     def context_delete(self):
         import tkinter.messagebox as messagebox
@@ -1529,13 +1570,9 @@ class MainForm:
 
         self._last_focus_out = now
 
-        # 1) Blocco durante avvio
-        if not self.allow_focus_out:
-            print("Focus Out prevented (startup)")
-            return
-
-        if self._block_focus_out:
-            print("Focus Out prevented (blocked)")
+        # 1) Blocco durante avvio o transizioni (es. menu)
+        if not self.allow_focus_out or self._block_focus_out:
+            print(f"Focus Out prevented (startup/blocked, allow={self.allow_focus_out}, block={self._block_focus_out})")
             return
 
         # 2) Blocco durante invio tag
@@ -1547,18 +1584,22 @@ class MainForm:
             print("Focus Out prevented (fade disabled)")
             return
 
-        # 3) Se il focus è ancora dentro la finestra -> NON è un vero FocusOut.
-        # Con ttk.Combobox, durante l'apertura del menu a discesa Tk può restituire
-        # un widget Tcl "popdown" non risolvibile via nametowidget (KeyError).
+        # 3) Se il focus è ancora dentro l'applicazione -> NON è un vero FocusOut.
+        # Rilevamento avanzato: controlliamo se il widget focalizzato appartiene a una finestra di questa app.
         try:
-            current = self.root.focus_displayof()
+            # focus_get() restituisce il widget se è in questo processo
+            focused_widget = self.root.focus_get()
+            if focused_widget is not None:
+                print(f"Focus Out prevented (focus on widget: {focused_widget})")
+                return
+                
+            # Ulteriore controllo tramite displayof (copre casi particolari con Toplevel)
+            focused_display = self.root.focus_displayof()
+            if focused_display is not None:
+                print("Focus Out prevented (focus_displayof match)")
+                return
         except (KeyError, tk.TclError):
-            print("Focus Out prevented (combobox popdown transition)")
-            return
-
-        if current is not None:
-            print("Focus Out prevented (focus still inside window)")
-            return
+            pass
 
         # 4) Se siamo già sbiaditi, non rifare il fade
         beh = self.config.get("behaviour", {})

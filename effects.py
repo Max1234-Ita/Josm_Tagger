@@ -106,12 +106,43 @@ def apply_background_picture(window, config=None):
     window._bg_image_label.configure(image=window._bg_image_tk)
 
 
+from tkinter import ttk
+
+def setup_scrollbar_style(config):
+    """Configura lo stile TTK per le scrollbar in base al tema corrente."""
+    theme = get_active_theme(config)
+    bg = theme.get("bg")
+    panel = theme.get("panel")
+    p_fg = theme.get("panel_fg")
+    
+    style = ttk.Style()
+    if "clam" in style.theme_names():
+        style.theme_use("clam")
+        
+    # Configurazione elementi Scrollbar
+    style.configure("TScrollbar", 
+                    gripcount=0,
+                    background=panel, 
+                    darkcolor=panel, 
+                    lightcolor=panel,
+                    troughcolor=bg, 
+                    bordercolor=bg, 
+                    arrowcolor=p_fg)
+    
+    # Effetto Hover
+    style.map("TScrollbar",
+              background=[('active', '#0078d7')],
+              arrowcolor=[('active', 'white')])
+
 def apply_theme_colors(window, config=None):
     theme = get_active_theme(config)
     bg = theme.get("bg", "#f0f0f0")
     panel = theme.get("panel", bg)
     fg = theme.get("fg", "#101010")
     panel_fg = theme.get("panel_fg", fg)
+    
+    # Inizializza stile scrollbar TTK
+    setup_scrollbar_style(config)
 
     def apply(widget, root_widget=False):
         target_bg = bg if root_widget else panel
@@ -124,6 +155,22 @@ def apply_theme_colors(window, config=None):
                                  activebackground="#0078d7", activeforeground="white",
                                  relief="flat")
             except Exception:
+                pass
+        # Gestione speciale per Scrollbar
+        elif isinstance(widget, tk.Scrollbar):
+            try:
+                widget.configure(bg=panel, troughcolor=bg, 
+                                 activebackground="#0078d7",
+                                 highlightthickness=0, bd=0)
+            except:
+                pass
+        # Gestione speciale per Spinbox
+        elif isinstance(widget, tk.Spinbox):
+            try:
+                widget.configure(bg=panel, fg=panel_fg, 
+                                 buttonbackground=panel,
+                                 insertbackground=panel_fg)
+            except:
                 pass
         else:
             try:

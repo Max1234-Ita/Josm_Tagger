@@ -146,10 +146,24 @@ class SearchForm:
         
         # Correzioni specifiche per ttk
         style = ttk.Style(self.root)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+            
         style.configure("Search.Treeview", 
                         background=self.panel_color, 
                         fieldbackground=self.panel_color, 
                         foreground=self.panel_fg)
+        
+        # Tematizzazione HEADERS (Intestazioni colonne)
+        style.configure("Search.Treeview.Heading", 
+                        background=self.panel_color, 
+                        foreground=self.panel_fg,
+                        relief="flat",
+                        font=self._font)
+        style.map("Search.Treeview.Heading",
+                  background=[('active', '#0078d7')],
+                  foreground=[('active', 'white')])
+
         style.map("Search.Treeview", 
                   background=[('selected', '#0078d7')], 
                   foreground=[('selected', 'white')])
@@ -231,9 +245,9 @@ class SearchForm:
         self.tree.heading("tags", text="Tags")
         self.tree.column("tags", width=400, minwidth=100, anchor="w", stretch=True)
 
-        # Usiamo tk.Scrollbar invece di ttk.Scrollbar per uniformità con main_form
-        vsb = tk.Scrollbar(tree_container, orient="vertical", command=self.tree.yview)
-        hsb = tk.Scrollbar(self.results_lf, orient="horizontal", command=self.tree.xview)
+        # Usiamo ttk.Scrollbar per supporto tema dinamico (tramite clam)
+        vsb = ttk.Scrollbar(tree_container, orient="vertical", command=self.tree.yview)
+        hsb = ttk.Scrollbar(self.results_lf, orient="horizontal", command=self.tree.xview)
         self.tree.configure(yscrollcommand=vsb.set, xscrollcommand=hsb.set)
 
         self.tree.grid(row=0, column=0, sticky="nsew")
@@ -253,7 +267,7 @@ class SearchForm:
                                   relief="solid", borderwidth=1, font=self._font, selectbackground="#0078d7")
         self.details.pack(side="left", fill="both", expand=True)
 
-        vsb2 = tk.Scrollbar(details_inner, orient="vertical", command=self.details.yview)
+        vsb2 = ttk.Scrollbar(details_inner, orient="vertical", command=self.details.yview)
         vsb2.pack(side="right", fill="y")
         self.details.configure(yscrollcommand=vsb2.set)
         

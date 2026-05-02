@@ -4,7 +4,7 @@ import os
 import sys
 
 from main import appinfo
-from effects import apply_background_picture
+from effects import apply_background_picture, apply_theme_colors, get_active_theme
 
 
 def resource_path(relative_path):
@@ -38,6 +38,13 @@ class AboutForm:
 
         self.window.title("About")
         self.window.attributes("-topmost", True)
+        
+        # Tema
+        theme = get_active_theme(self.config)
+        self.bg_color = theme.get("bg", "#f0f0f0")
+        self.fg_color = theme.get("fg", "#101010")
+        self.window.configure(bg=self.bg_color)
+        
         apply_background_picture(self.window, self.config)
 
         # Disable resize
@@ -61,22 +68,29 @@ class AboutForm:
         self._load_geometry()
 
         # Main frame
-        main_frame = tk.Frame(self.window)
+        main_frame = tk.Frame(self.window, bg=self.bg_color)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Image label (initially empty)
-        self.icon_label = tk.Label(main_frame)
+        self.icon_label = tk.Label(main_frame, bg=self.bg_color)
         self.icon_label.pack(pady=(0, 10))
 
         # Appinfo text
+        f = (self.config.get("font_family", "Calibri"), int(self.config.get("font_size", 11)))
+        
         info_label = tk.Label(
             main_frame,
             text=appinfo,
             justify="center",
             wraplength=AboutForm.MAX_SIZE - 40,
-            fg="#000000"
+            bg=self.bg_color,
+            fg=self.fg_color,
+            font=f
         )
         info_label.pack(anchor="center", pady=(10, 10))
+
+        # Applica tema globale ricorsivamente
+        apply_theme_colors(self.window, self.config)
 
         # Handle close
         self.window.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -188,5 +202,5 @@ class AboutForm:
 
         self.image = self.raw_image.subsample(subsample_x, subsample_y)
 
-        self.icon_label.configure(image=self.image)
-
+        theme = get_active_theme(self.config)
+        self.icon_label.configure(image=self.image, bg=theme.get("bg"))
