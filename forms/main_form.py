@@ -4,7 +4,7 @@ import json
 import time
 import tkinter as tk
 import tkinter.ttk as ttk
-import threading
+
 import keyboard
 # ---------------------------------------------------------------------------
 # NOTE SU PYSTRAY (IMPORTANTE)
@@ -29,7 +29,6 @@ import keyboard
 import pystray
 
 from PIL import Image
-from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
@@ -37,7 +36,7 @@ from effects import TransparencyFader, get_active_theme, apply_theme_colors, app
 from josm_interface import send_tags
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
-
+from forms.search_form import SearchForm
 
 
 def resource_path(relative_path):
@@ -129,7 +128,6 @@ class MainForm:
         self.root.bind("<Configure>", self._on_main_configure, add="+")
 
         # X → minimizza nella tray
-        # self.root.protocol("WM_DELETE_WINDOW", self.minimize_to_tray)
         self.root.protocol("WM_DELETE_WINDOW", self._on_main_window_close)
 
         # --- WINDOW FADING ---
@@ -141,15 +139,15 @@ class MainForm:
         self.root.after(500, lambda: setattr(self, "allow_focus_out", True))
         self._is_faded = False
 
-        # self.fader = TransparencyFader(self.root)
         self.fader = TransparencyFader(self)
 
         # Track send() state
         self._sending_in_progress = False
 
-        # # Bind focus events
-        # self.root.bind("<FocusIn>", self._on_focus_in)
-        # self.root.bind("<FocusOut>", self._on_focus_out)
+        # Keyboard shortcuts
+        self.root.bind("<Control-f>", self.open_search)
+        self.root.bind("<Control-F>", self.open_search)
+        self.root.bind("<Alt-F4>", lambda e: self._exit_app())
 
         # --- ISOLATE FOCUS EVENTS (fix doppio FocusIn/Out) ---
         # Rimuove i binding di classe Toplevel e 'all' per FocusIn/Out
@@ -316,32 +314,184 @@ class MainForm:
 
     # ---------------- MENU ----------------
     def build_menu(self):
-        self.menubar = tk.Menu(self.root)
+        """Crea una barra dei menu personalizzata con logica dropdown non bloccante."""
+        self.menubar_frame = tk.Frame(self.root, bd=0, relief="flat", height=28)
+        self.menubar_frame.pack(side="top", fill="x")
+        
+        self.menu_buttons = []
+        self._menu_data = {}
+        self._menu_active = False
+        self._active_dropdown = None
+        self._active_button = None
+        self._close_job = None
 
-        file_menu = tk.Menu(self.menubar, tearoff=0)
-        file_menu.add_command(label="Reload tags", command=self.reload_codes)
-        file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self._exit_app)
+        class MenuProxy:
+            def __init__(self): self.items = []
+            def add_command(self, label, command=None, accelerator=None):
+                self.items.append({"label": label, "command": command, "accel": accelerator})
+            def add_separator(self):
+                self.items.append({"label": "---", "command": None, "accel": None})
 
-        edit_menu = tk.Menu(self.menubar, tearoff=0)
-        edit_menu.add_command(label="Tags & Codes", command=self.open_editor)
-        edit_menu.add_separator()
-        edit_menu.add_command(label="Preferences", command=self.open_preferences)
+        def create_menu_item(label, setup_func):
+            btn = tk.Label(self.menubar_frame, text=label, padx=12, pady=5, cursor="hand2")
+            btn.pack(side="left")
+            
+            proxy = MenuProxy()
+            setup_func(proxy)
+            self._menu_data[btn] = proxy.items
+            
+            # Bindings
+            btn.bind("<Button-1>", lambda e, b=btn: self._toggle_menu(b))
+            btn.bind("<Enter>", lambda e, b=btn: self._on_menu_hover(b))
+            btn.bind("<Leave>", lambda e: self._on_menu_leave())
+            
+            self.menu_buttons.append(btn)
+            return btn
 
-        view_menu = tk.Menu(self.menubar, tearoff=0)
-        view_menu.add_command(label="Font", command=self.select_font)
-        view_menu.add_separator()
-        view_menu.add_command(label="Minimize to tray", command=self.minimize_to_tray)
+        # 1. FILE
+        create_menu_item("File", lambda m: (
+            m.add_command("Reload tags", self.reload_codes),
+            m.add_separator(),
+            m.add_command("Exit", self._exit_app, "Alt+F4")
+        ))
+        # 2. EDIT
+        create_menu_item("Edit", lambda m: (
+            m.add_command("Tags & Codes", self.open_editor),
+            m.add_command("Search", self.open_search, "Ctrl+F"),
+            m.add_separator(),
+            m.add_command("Preferences", self.open_preferences)
+        ))
+        # 3. VIEW
+        create_menu_item("View", lambda m: (
+            m.add_command("Font", self.select_font),
+            m.add_separator(),
+            m.add_command("Minimize to tray", self.minimize_to_tray)
+        ))
+        # 4. ABOUT
+        create_menu_item("   ?   ", lambda m: m.add_command("About", self.show_about))
 
-        about_menu = tk.Menu(self.menubar, tearoff=0)
-        about_menu.add_command(label="About", command=self.show_about)
+        # Reset se clicco fuori (solo se NON è un widget del menu)
+        self.root.bind("<Button-1>", self._check_menu_click_outside, add="+")
 
-        self.menubar.add_cascade(label="File", menu=file_menu)
-        self.menubar.add_cascade(label="Edit", menu=edit_menu)
-        self.menubar.add_cascade(label="View", menu=view_menu)
-        self.menubar.add_cascade(label="   ?", menu=about_menu)
+    def _on_menu_leave(self):
+        """Avvia il timer per la chiusura, ma solo se non siamo già in un'area protetta."""
+        if self._active_dropdown:
+            if self._close_job: self.root.after_cancel(self._close_job)
+            # Aumentiamo leggermente il tempo per dare margine di movimento
+            self._close_job = self.root.after(500, self._close_dropdown)
 
-        self.root.config(menu=self.menubar)
+    def _cancel_close(self, e=None):
+        """Annulla qualsiasi operazione di chiusura pendente."""
+        if self._close_job:
+            self.root.after_cancel(self._close_job)
+            self._close_job = None
+
+    def _toggle_menu(self, btn):
+        self._cancel_close() # Protezione immediata
+        if self._active_button == btn:
+            self._close_dropdown()
+            self._menu_active = False
+        else:
+            self._menu_active = True
+            self._show_dropdown(btn)
+
+    def _on_menu_hover(self, btn):
+        if self._menu_active:
+            self._cancel_close() # Impedisce la chiusura durante il passaggio tra pulsanti
+            self._show_dropdown(btn)
+
+    def _show_dropdown(self, btn):
+        # Se il menu per questo pulsante è già attivo, basta annullare la chiusura
+        if self._active_button == btn and self._active_dropdown: 
+            self._cancel_close()
+            return
+            
+        self._close_dropdown()
+        self._active_button = btn
+        
+        # Crea finestra dropdown
+        top = tk.Toplevel(self.root)
+        top.overrideredirect(True)
+        top.attributes("-topmost", True)
+        self._active_dropdown = top
+        
+        # Il menu stesso deve annullare la chiusura quando il mouse ci entra
+        top.bind("<Enter>", self._cancel_close)
+        top.bind("<Leave>", lambda e: self._on_menu_leave())
+
+        # Colori e Font
+        theme = get_active_theme(self.config)
+        p_bg = theme.get("panel")
+        p_fg = theme.get("panel_fg")
+        f = (self.config.get("font_family", "Calibri"), int(self.config.get("font_size", 10)))
+        
+        inner = tk.Frame(top, bg=p_bg, highlightthickness=1, highlightbackground=theme.get("fg"))
+        inner.pack(fill="both", expand=True)
+        
+        # Binding ricorsivo per annullare la chiusura su ogni parte del menu
+        inner.bind("<Enter>", self._cancel_close)
+
+        items = self._menu_data[btn]
+        for item in items:
+            if item["label"] == "---":
+                tk.Frame(inner, height=1, bg=theme.get("fg"), pady=2).pack(fill="x", padx=5)
+                continue
+            
+            lbl_text = item["label"]
+            if item["accel"]: lbl_text += f"   ({item['accel']})"
+            
+            l = tk.Label(inner, text=lbl_text, bg=p_bg, fg=p_fg, font=f, 
+                         padx=20, pady=6, anchor="w", cursor="hand2")
+            l.pack(fill="x")
+            
+            # Ogni riga annulla attivamente il timer di chiusura
+            l.bind("<Enter>", lambda e, w=l: (self._cancel_close(), w.configure(bg="#0078d7", fg="white")))
+            l.bind("<Leave>", lambda e, w=l: w.configure(bg=p_bg, fg=p_fg))
+            l.bind("<Button-1>", lambda e, cmd=item["command"]: self._exec_menu_cmd(cmd))
+
+        # Posizionamento: SOVRAPPOSIZIONE di 2px per eliminare zone morte
+        self.root.update_idletasks()
+        x = btn.winfo_rootx()
+        y = btn.winfo_rooty() + btn.winfo_height() - 2
+        top.geometry(f"+{x}+{y}")
+        
+        # Protezione finale: dopo aver mostrato, annulliamo ancora una volta eventuali timer spuri
+        self.root.after(10, self._cancel_close)
+
+    def _exec_menu_cmd(self, cmd):
+        self._close_dropdown()
+        self._menu_active = False
+        self._block_focus_out = True
+        if cmd:
+            self.root.after(10, cmd)
+            self.root.after(1000, lambda: setattr(self, "_block_focus_out", False))
+
+    def _close_dropdown(self):
+        if self._active_dropdown:
+            try: self._active_dropdown.destroy()
+            except: pass
+            self._active_dropdown = None
+        self._active_button = None
+        self._close_job = None
+
+    def _check_menu_click_outside(self, event):
+        if not self._menu_active: return
+        
+        # Se clicco sulla barra dei menu o sul dropdown, NON chiudere
+        w = event.widget
+        if w in self.menu_buttons or w == self.menubar_frame:
+            return
+            
+        # Verifica se il widget cliccato è all'interno del dropdown attivo
+        if self._active_dropdown:
+            try:
+                if str(w).startswith(str(self._active_dropdown)):
+                    return
+            except: pass
+
+        # Se siamo qui, il clic è veramente "fuori"
+        self._close_dropdown()
+        self._menu_active = False
 
     # ---------------- UI ----------------
     def build_ui(self):
@@ -383,11 +533,10 @@ class MainForm:
         self.code_list.bind("<Motion>", self._on_list_motion)
         self.code_list.bind("<Leave>", self._on_list_leave)
 
-        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.code_list.yview)
         scrollbar.pack(side="right", fill="y")
         self.code_list.pack(fill="both", expand=True, side="left")
         self.code_list.config(yscrollcommand=scrollbar.set)
-        scrollbar.config(command=self.code_list.yview)
 
         self.code_list.bind("<<ListboxSelect>>", self.update_preview)
         self.code_list.bind("<Double-Button-1>", self.apply_from_list)
@@ -429,11 +578,10 @@ class MainForm:
         preview_inner.pack(fill="both", expand=True)
 
         self.preview = tk.Listbox(preview_inner, height=4)
-        scrollbar_preview = tk.Scrollbar(preview_inner)
+        scrollbar_preview = ttk.Scrollbar(preview_inner, orient="vertical", command=self.preview.yview)
         scrollbar_preview.pack(side="right", fill="y")
         self.preview.pack(fill="both", expand=True, side="left")
         self.preview.config(yscrollcommand=scrollbar_preview.set)
-        scrollbar_preview.config(command=self.preview.yview)
 
         # Make preview read-only to mouse clicks
         self.preview.bind("<Button-1>", lambda e: "break")
@@ -715,7 +863,7 @@ class MainForm:
         if not sel:
             return
         code = self.code_list.get(sel[0])
-        TagEditorForm(self.root, self.codes, preload_code=code)
+        self.open_editor(code)
 
     def context_delete(self):
         import tkinter.messagebox as messagebox
@@ -737,6 +885,77 @@ class MainForm:
     def apply_theme(self):
         """Applica il tema attivo ai widget Tk compatibili."""
         apply_theme_colors(self.root, self.config)
+        
+        # Correzioni extra per widget che richiedono parametri specifici (panel_fg)
+        theme = get_active_theme(self.config)
+        panel_color = theme.get("panel")
+        panel_fg = theme.get("panel_fg")
+        bg_color = theme.get("bg")
+        fg_color = theme.get("fg")
+        
+        # Stile TTK per Combobox
+        style = ttk.Style(self.root)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+        
+        style.configure("TCombobox", 
+                        fieldbackground=panel_color, 
+                        background=panel_color, 
+                        foreground=panel_fg,
+                        arrowcolor=panel_fg)
+        
+        # Dropdown colors
+        self.root.option_add("*TCombobox*Listbox.background", panel_color)
+        self.root.option_add("*TCombobox*Listbox.foreground", panel_fg)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", "#0078d7")
+        
+        # Tematizzazione barra menu personalizzata
+        if hasattr(self, "menubar_frame"):
+            self.menubar_frame.configure(bg=bg_color)
+        
+        if hasattr(self, "menu_buttons"):
+            for btn in self.menu_buttons:
+                try:
+                    btn.configure(bg=bg_color, fg=fg_color, 
+                                  activebackground="#0078d7", activeforeground="white")
+                except:
+                    pass
+        
+        if hasattr(self, "menus"):
+            for menu in self.menus:
+                try:
+                    menu.configure(bg=panel_color, fg=panel_fg, 
+                                   activebackground="#0078d7", activeforeground="white")
+                    # Tenta di forzare il colore sui singoli elementi
+                    for i in range(menu.index("end") + 1):
+                        try:
+                            menu.entryconfigure(i, background=panel_color, foreground=panel_fg)
+                        except:
+                            pass
+                except:
+                    pass
+
+        def apply_extra(widget):
+            if isinstance(widget, (tk.Entry, tk.Listbox)):
+                try:
+                    widget.configure(bg=panel_color, fg=panel_fg)
+                    if hasattr(widget, "configure") and "insertbackground" in widget.keys():
+                        widget.configure(insertbackground=panel_fg)
+                except:
+                    pass
+            
+            if isinstance(widget, tk.Listbox):
+                try:
+                    widget.configure(selectbackground="#0078d7", selectforeground="white")
+                except:
+                    pass
+                    
+            for child in widget.winfo_children():
+                # Evitiamo di ricolorare i menu qui, l'abbiamo fatto sopra in modo specifico
+                if not isinstance(child, tk.Menu):
+                    apply_extra(child)
+        
+        apply_extra(self.root)
 
     # ---------------- FONT ----------------
     def apply_font(self):
@@ -1108,12 +1327,13 @@ class MainForm:
         self.entry.focus_set()
         self.entry.icursor(tk.END)
 
-    def open_editor(self):
+    def open_editor(self, code=None):
         TagEditorForm(
             self.root,
             self.codes,
             on_save_callback=self.reload_codes,
             config=self.config,
+            preload_code=code
         )
 
     def open_preferences(self):
@@ -1131,6 +1351,10 @@ class MainForm:
             on_theme_toggle=self._apply_runtime_theme,
         )
         self._preferences_form.protocol("WM_DELETE_WINDOW", self._on_preferences_close)
+
+    def open_search(self, event=None):
+        from forms.search_form import SearchForm
+        SearchForm(self, self.codes, self.config)
 
     def _apply_runtime_theme(self):
         active = get_active_theme(self.config)
@@ -1296,22 +1520,6 @@ class MainForm:
         except:
             pass
 
-    # def _on_focus_in(self, event=None):
-    #
-    #     # se un fade-out è in corso, NON interrompere
-    #     if self._fade_in_progress:
-    #         return
-    #
-    #     beh = self.config.get("behaviour", {})
-    #     target = beh.get("transparency_active", 100) / 100
-    #     duration = int(beh.get("fade_duration_ms", 300))
-    #
-    #     self.fader.fade(
-    #         start_alpha=float(self.root.attributes("-alpha")),
-    #         end_alpha=target,
-    #         duration_ms=duration
-    #     )
-
     def _on_focus_in(self, event=None):
         """Fade-in solo quando necessario, con debounce."""
 
@@ -1346,40 +1554,6 @@ class MainForm:
             duration_ms=duration
         )
 
-    # def _on_focus_out(self, event=None):
-    #     print(f"FOCUS OUT TRIGGERED. Event: '{event}")
-    #
-    #     # # blocca durante avvio
-    #     # if not self.allow_focus_out:
-    #     #     return
-    #
-    #     # blocca durante invio
-    #     if self._sending_in_progress or self._fade_in_progress or not self.allow_focus_out:
-    #         print('Focus Out prevented')
-    #         return
-    #
-    #     # # blocca se un fade è già in corso
-    #     # if self._fade_in_progress:
-    #     #     return
-    #
-    #     # se il focus è ancora dentro la finestra, non è perdita reale
-    #     w = self.root.focus_get()
-    #     if w is not None and str(w).startswith(str(self.root)):
-    #         return
-    #
-    #     # avvia fade-out
-    #     self._fade_in_progress = True
-    #
-    #     start_alpha = float(self.root.attributes("-alpha"))
-    #     beh = self.config.get("behaviour", {})
-    #     target = beh.get("transparency_faded", 35) / 100
-    #     duration = int(beh.get("fade_duration_ms", 300))
-    #     self.fader.fade(
-    #         start_alpha=start_alpha,
-    #         end_alpha=target,
-    #         duration_ms=duration
-    #     )
-
     def _on_focus_out(self, event=None):
         """Fade-out solo quando il focus esce DAVVERO dalla finestra, con debounce."""
 
@@ -1396,13 +1570,9 @@ class MainForm:
 
         self._last_focus_out = now
 
-        # 1) Blocco durante avvio
-        if not self.allow_focus_out:
-            print("Focus Out prevented (startup)")
-            return
-
-        if self._block_focus_out:
-            print("Focus Out prevented (blocked)")
+        # 1) Blocco durante avvio o transizioni (es. menu)
+        if not self.allow_focus_out or self._block_focus_out:
+            print(f"Focus Out prevented (startup/blocked, allow={self.allow_focus_out}, block={self._block_focus_out})")
             return
 
         # 2) Blocco durante invio tag
@@ -1414,18 +1584,22 @@ class MainForm:
             print("Focus Out prevented (fade disabled)")
             return
 
-        # 3) Se il focus è ancora dentro la finestra -> NON è un vero FocusOut.
-        # Con ttk.Combobox, durante l'apertura del menu a discesa Tk può restituire
-        # un widget Tcl "popdown" non risolvibile via nametowidget (KeyError).
+        # 3) Se il focus è ancora dentro l'applicazione -> NON è un vero FocusOut.
+        # Rilevamento avanzato: controlliamo se il widget focalizzato appartiene a una finestra di questa app.
         try:
-            current = self.root.focus_displayof()
+            # focus_get() restituisce il widget se è in questo processo
+            focused_widget = self.root.focus_get()
+            if focused_widget is not None:
+                print(f"Focus Out prevented (focus on widget: {focused_widget})")
+                return
+                
+            # Ulteriore controllo tramite displayof (copre casi particolari con Toplevel)
+            focused_display = self.root.focus_displayof()
+            if focused_display is not None:
+                print("Focus Out prevented (focus_displayof match)")
+                return
         except (KeyError, tk.TclError):
-            print("Focus Out prevented (combobox popdown transition)")
-            return
-
-        if current is not None:
-            print("Focus Out prevented (focus still inside window)")
-            return
+            pass
 
         # 4) Se siamo già sbiaditi, non rifare il fade
         beh = self.config.get("behaviour", {})

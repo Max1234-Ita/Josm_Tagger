@@ -3,26 +3,28 @@
   "font_family": "Calibri",
   "font_size": 11,
   "ui_scale": 1.0,
-  "dark_theme_enabled": false,
+  "dark_theme_enabled": true,
   "theme": {
     "bg": "#f0f0f0",
     "fg": "#101010",
     "picture": null,
-    "panel": "#e4e6ea"
+    "panel": "#e4e6ea",
+    "panel_fg": "#101010"
   },
   "dark_theme": {
     "bg": "#2c3038",
-    "fg": "#6a8195",
+    "fg": "#949494",
     "picture": null,
-    "panel": "#3d434e"
+    "panel": "#3d434e",
+    "panel_fg": "#c0c0c0"
   },
   "geometry_tag_editor": "833x436+204+247",
   "geometry_font_selector": "363x419+250+293",
   "about_form_geometry": "300x340+104+104",
   "geometry": {
     "main_form": {
-      "x": 56,
-      "y": 26,
+      "x": 41,
+      "y": 63,
       "w": 342,
       "h": 320
     },
@@ -45,19 +47,24 @@
   },
   "command_history_items": 20,
   "command_history": [
-    "tub",
+    "t",
+    "tr",
     "bg",
+    "pfw",
     "eny",
-    "leisw",
+    "fw",
+    "recy",
+    "pser",
     "gar",
+    "tg",
+    "bl2",
+    "bl3",
+    "tub",
+    "leisw",
     "leig",
     "bf",
-    "pser",
-    "bl3",
-    "bl2",
     "bl5",
     "bl4",
-    "tr",
     "bl6",
     "brw"
   ]

@@ -6,7 +6,7 @@ import tkinter.ttk as ttk
 from tkinter import messagebox, simpledialog
 
 from codes_manager import save_codes
-from effects import apply_background_picture, apply_theme_colors
+from effects import apply_background_picture, apply_theme_colors, get_active_theme
 
 
 def _monitor_workarea_from_point(x, y, fallback_window):
@@ -50,32 +50,30 @@ def _monitor_workarea_from_point(x, y, fallback_window):
         except Exception:
             pass
 
-    left = 0
-    top = 0
-    right = int(fallback_window.winfo_screenwidth())
-    bottom = int(fallback_window.winfo_screenheight())
-    return left, top, right, bottom
+    try:
+        return (0, 0, fallback_window.winfo_screenwidth(), fallback_window.winfo_screenheight())
+    except Exception:
+        return (0, 0, 1920, 1080)
 
 
 def _clamp_to_monitor(window, x, y):
-    window.update_idletasks()
-    ww = max(1, int(window.winfo_width()))
-    wh = max(1, int(window.winfo_height()))
-    left, top, right, bottom = _monitor_workarea_from_point(x, y, window)
-
-    max_x = max(left, right - ww)
-    max_y = max(top, bottom - wh)
-    clamped_x = min(max(int(x), left), max_x)
-    clamped_y = min(max(int(y), top), max_y)
-    return clamped_x, clamped_y
+    try:
+        area = _monitor_workarea_from_point(x, y, window)
+        min_x, min_y, max_x, max_y = area
+        window.update_idletasks()
+        w = window.winfo_reqwidth()
+        h = window.winfo_reqheight()
+        final_x = max(min_x, min(x, max_x - w))
+        final_y = max(min_y, min(y, max_y - h))
+        return final_x, final_y
+    except Exception:
+        return x, y
 
 
 class TagPropertiesForm:
-    def __init__(self, parent, config=None, key_value=None):
-        self.parent = parent
+    def __init__(self, parent, config, key_value=None):
+        self.config = config
         self.result = None
-        self.config = config or {}
-
         self.root = tk.Toplevel(parent)
         self.root.title("Tag properties")
         self.root.attributes("-topmost", True)
@@ -154,6 +152,13 @@ class TagPropertiesForm:
 
     def _apply_theme(self):
         apply_theme_colors(self.root, self.config)
+        theme = get_active_theme(self.config)
+        p_fg = theme.get("panel_fg")
+        p_bg = theme.get("panel")
+        for child in self.root.winfo_children():
+            for w in child.winfo_children():
+                if isinstance(w, tk.Entry):
+                    w.configure(bg=p_bg, fg=p_fg, insertbackground=p_fg)
 
     def _place_near_pointer(self):
         self.root.update_idletasks()
@@ -280,7 +285,7 @@ class TagEditorForm:
         list_container.pack(fill="both", expand=True)
         self.code_list = tk.Listbox(list_container)
         self.code_list.pack(side="left", fill="both", expand=True)
-        scrollbar_left = tk.Scrollbar(list_container, command=self.code_list.yview)
+        scrollbar_left = ttk.Scrollbar(list_container, orient="vertical", command=self.code_list.yview)
         scrollbar_left.pack(side="right", fill="y")
         self.code_list.config(yscrollcommand=scrollbar_left.set)
         self.code_list.bind("<<ListboxSelect>>", self.on_code_select)
@@ -294,7 +299,7 @@ class TagEditorForm:
         tag_container.pack(fill="both", expand=True)
         self.tag_list = tk.Listbox(tag_container)
         self.tag_list.pack(side="left", fill="both", expand=True)
-        scrollbar = tk.Scrollbar(tag_container, command=self.tag_list.yview)
+        scrollbar = ttk.Scrollbar(tag_container, orient="vertical", command=self.tag_list.yview)
         scrollbar.pack(side="right", fill="y")
         self.tag_list.config(yscrollcommand=scrollbar.set)
         self.tag_list.bind("<Button-3>", self.show_tag_context_menu)
@@ -450,123 +455,82 @@ class TagEditorForm:
         return form.result
 
     def add_tag(self):
-        code = self.code_var.get().strip()
-        if not code or code not in self.working_codes:
-            messagebox.showwarning("Warning", "Please select or create a code first", parent=self.root)
+        if not self.current_code:
+            messagebox.showwarning("Warning", "Select or enter a code first")
             return
-        data = self._open_tag_properties()
-        if not data:
-            return
-        self.current_code = code
-        self.working_codes[self.current_code].append(data)
-        self.update_tag_list()
+        res = self._open_tag_properties()
+        if res:
+            if self.current_code not in self.working_codes:
+                self.working_codes[self.current_code] = []
+            self.working_codes[self.current_code].append(res)
+            self.update_tag_list()
 
     def edit_tag(self):
         sel = self.tag_list.curselection()
         if not sel:
-            messagebox.showwarning("Warning", "Please select a tag to edit", parent=self.root)
-            return
-        if not self.current_code or self.current_code not in self.working_codes:
             return
         idx = sel[0]
-        current = self.working_codes[self.current_code][idx]
-        updated = self._open_tag_properties(initial=current)
-        if not updated:
-            return
-        self.working_codes[self.current_code][idx] = updated
-        self.update_tag_list()
-        self.tag_list.selection_set(idx)
-        self.tag_list.see(idx)
+        initial = self.working_codes[self.current_code][idx]
+        res = self._open_tag_properties(initial)
+        if res:
+            self.working_codes[self.current_code][idx] = res
+            self.update_tag_list()
 
     def remove_tag(self):
         sel = self.tag_list.curselection()
         if not sel:
-            messagebox.showwarning("Warning", "Please select a tag to edit", parent=self.root)
-            return
-        if not self.current_code or self.current_code not in self.working_codes:
             return
         idx = sel[0]
-        confirm = messagebox.askyesno("Remove tag", "Remove selected tag?", parent=self.root)
-        if not confirm:
-            return
-        self.working_codes[self.current_code].pop(idx)
+        del self.working_codes[self.current_code][idx]
         self.update_tag_list()
 
     def new_code(self):
-        code = self.code_var.get().strip()
-        if not code:
-            messagebox.showwarning("Warning", "Enter a code name first", parent=self.root)
-            return
-        if code in self.working_codes:
-            messagebox.showwarning("Warning", "Code already exists", parent=self.root)
-            return
-
-        self.working_codes[code] = []
-        self.current_code = code
-        self.update_code_list()
-        self.load_code(code)
-        self.add_tag()
+        name = simpledialog.askstring("New Code", "Enter code name:", parent=self.root)
+        if name:
+            name = name.strip()
+            if name in self.working_codes:
+                messagebox.showerror("Error", f"Code '{name}' already exists")
+                return
+            self.working_codes[name] = []
+            self.update_code_list()
+            self.load_code(name)
 
     def rename_code(self):
-        sel = self.code_list.curselection()
-        if not sel:
-            messagebox.showwarning("Warning", "Please select a code to rename", parent=self.root)
+        if not self.current_code:
             return
-
-        old_code = self.code_list.get(sel[0])
-        new_code = simpledialog.askstring(
-            "Rename code",
-            "Enter new code name:",
-            initialvalue=old_code,
-            parent=self.root,
-        )
-        if not new_code:
-            return
-        new_code = new_code.strip()
-        if not new_code or new_code == old_code:
-            return
-        if new_code in self.working_codes:
-            messagebox.showwarning("Warning", "Code already exists", parent=self.root)
-            return
-
-        self.working_codes[new_code] = self.working_codes.pop(old_code)
-        self.update_code_list()
-        self.load_code(new_code)
+        old = self.current_code
+        new = simpledialog.askstring("Rename", f"Rename '{old}' to:", initialvalue=old, parent=self.root)
+        if new:
+            new = new.strip()
+            if new == old:
+                return
+            if new in self.working_codes:
+                messagebox.showerror("Error", f"Code '{new}' already exists")
+                return
+            self.working_codes[new] = self.working_codes.pop(old)
+            self.update_code_list()
+            self.load_code(new)
 
     def delete_code(self):
-        sel = self.code_list.curselection()
-        if not sel:
-            messagebox.showwarning("Warning", "Please select a code to delete", parent=self.root)
+        if not self.current_code:
             return
-
-        code = self.code_list.get(sel[0])
-        confirm = messagebox.askyesno("Delete code", f"Delete code '{code}'?", parent=self.root)
-        if not confirm:
-            return
-
-        self.working_codes.pop(code, None)
-        self.update_code_list()
-
-        if self.current_code == code:
+        code = self.current_code
+        if messagebox.askyesno("Delete", f"Delete code '{code}'?"):
+            del self.working_codes[code]
             self.current_code = None
-            if self._trace_id:
-                self.code_var.trace_remove("write", self._trace_id)
             self.code_var.set("")
-            self._trace_id = self.code_var.trace_add("write", self.auto_load_code)
-            self.tag_list.delete(0, tk.END)
+            self.update_code_list()
+            self.update_tag_list()
 
     def ok(self):
-        save_codes(self.working_codes)
         self.source_codes.clear()
-        self.source_codes.update(copy.deepcopy(self.working_codes))
+        self.source_codes.update(self.working_codes)
+        save_codes(self.source_codes)
         if self.on_save_callback:
             self.on_save_callback()
-        self._close()
+        self.root.destroy()
 
     def cancel(self):
-        self._close()
-
-    def _close(self):
         try:
             self.root.destroy()
         finally:
@@ -591,3 +555,46 @@ class TagEditorForm:
 
     def apply_theme(self):
         apply_theme_colors(self.root, self.config)
+        theme = get_active_theme(self.config)
+        p_fg = theme.get("panel_fg")
+        p_bg = theme.get("panel")
+        
+        # Stile TTK per Combobox
+        style = ttk.Style(self.root)
+        if "clam" in style.theme_names():
+            style.theme_use("clam")
+            
+        style.configure("TCombobox", 
+                        fieldbackground=p_bg, 
+                        background=p_bg, 
+                        foreground=p_fg,
+                        arrowcolor=p_fg)
+        
+        # Dropdown colors
+        self.root.option_add("*TCombobox*Listbox.background", p_bg)
+        self.root.option_add("*TCombobox*Listbox.foreground", p_fg)
+        
+        def apply_extra(widget):
+            if isinstance(widget, tk.Menu):
+                try:
+                    widget.configure(bg=p_bg, fg=p_fg, 
+                                     activebackground="#0078d7", activeforeground="white")
+                except:
+                    pass
+
+            if isinstance(widget, (tk.Entry, tk.Listbox)):
+                try:
+                    widget.configure(bg=p_bg, fg=p_fg)
+                    if hasattr(widget, "configure") and "insertbackground" in widget.keys():
+                        widget.configure(insertbackground=p_fg)
+                except:
+                    pass
+            if isinstance(widget, tk.Listbox):
+                try:
+                    widget.configure(selectbackground="#0078d7", selectforeground="white")
+                except:
+                    pass
+            for child in widget.winfo_children():
+                apply_extra(child)
+        
+        apply_extra(self.root)
