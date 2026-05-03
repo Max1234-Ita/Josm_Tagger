@@ -532,5 +532,11 @@
             "key": "leisure",
             "value": "garden"
         }
+    ],
+    "ony": [
+        {
+            "key": "oneway",
+            "value": "yes"
+        }
     ]
 }
