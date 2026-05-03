@@ -7,16 +7,15 @@ from tkinter import colorchooser, filedialog, messagebox
 
 from config_manager import load_config, save_config
 from effects import apply_background_picture, apply_theme_colors, get_active_theme
+from forms.base_form import BaseForm
 
 
-class OptionsForm(tk.Toplevel):
+class OptionsForm(BaseForm):
     """
     Application options window.
     """
 
     def __init__(self, master, config, on_theme_toggle=None):
-        super().__init__(master)
-
         # --- CONFIGURATION ---
         self.config = config
         self.on_theme_toggle = on_theme_toggle
@@ -25,6 +24,7 @@ class OptionsForm(tk.Toplevel):
         self.temp_config = copy.deepcopy(self.config_data)
         self._initial_dark_mode_enabled = bool(self.config_data.get("dark_theme_enabled", False))
 
+        super().__init__(master, "options")
         self.resizable(False, False)
         self._ensure_defaults()
 
@@ -52,8 +52,6 @@ class OptionsForm(tk.Toplevel):
         # --- CLOSE EVENTS ---
         self.protocol("WM_DELETE_WINDOW", self._on_cancel)
 
-        self.transient(master)
-        self.grab_set()
         self._place_near_pointer_with_parent_offset(master)
         self.focus_set()
 

@@ -6,6 +6,9 @@ from PIL import Image, ImageTk
 
 from config_manager import load_config
 
+# Global flag to signal that a form is being opened, used to abort fading in MainForm
+is_any_form_opening = False
+fade_away = True  # Set to True to enable fade-away effect, False to disable
 
 def get_active_theme(config=None):
     cfg = config if isinstance(config, dict) else load_config()
@@ -28,8 +31,36 @@ class TransparencyFader:
         self.widget = owner.root
         self._fade_job = None
 
+    def stop(self, reset_alpha=None):
+        """Interrompe il fading in corso e opzionalmente resetta l'alpha."""
+        if self._fade_job:
+            self.widget.after_cancel(self._fade_job)
+            self._fade_job = None
+        if reset_alpha is not None:
+            try:
+                self.widget.attributes("-alpha", reset_alpha)
+            except:
+                pass
+        self.owner._fade_in_progress = False
+
     def fade(self, start_alpha, end_alpha, duration_ms):
         def step():
+            global fade_away
+            if not fade_away:
+                # Ripristina la trasparenza attiva dalla configurazione e interrompe il fading
+                try:
+                    cfg = load_config()
+                    active_alpha = cfg.get("behaviour", {}).get("transparency_active", 100) / 100
+                    self.widget.attributes("-alpha", active_alpha)
+                except:
+                    self.widget.attributes("-alpha", 1.0)
+
+                self.owner._fade_in_progress = False
+                if self._fade_job:
+                    self.widget.after_cancel(self._fade_job)
+                    self._fade_job = None
+                return
+
             nonlocal current, steps
             current += delta
             steps -= 1
@@ -45,6 +76,7 @@ class TransparencyFader:
 
         # -----------------------------------------------------
         print(f'Fading {start_alpha} -> {end_alpha} in {duration_ms} ms')
+
 
         if start_alpha != end_alpha:
             if self._fade_job:
@@ -185,4 +217,3 @@ def apply_theme_colors(window, config=None):
             apply(child, root_widget=False)
 
     apply(window, root_widget=True)
-

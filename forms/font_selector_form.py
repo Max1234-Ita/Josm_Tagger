@@ -2,18 +2,19 @@ import tkinter as tk
 from tkinter import font
 from config_manager import save_config
 from effects import apply_background_picture, get_active_theme, apply_theme_colors
+from forms.base_form import BaseForm
 
 
-class FontSelectorForm:
+class FontSelectorForm(BaseForm):
 
     _instance = None
 
     def __init__(self, root, config, apply_callback):
 
-        if FontSelectorForm._instance and FontSelectorForm._instance.root.winfo_exists():
-            FontSelectorForm._instance.root.deiconify()
-            FontSelectorForm._instance.root.lift()
-            FontSelectorForm._instance.root.focus_force()
+        if FontSelectorForm._instance and FontSelectorForm._instance.winfo_exists():
+            FontSelectorForm._instance.deiconify()
+            FontSelectorForm._instance.lift()
+            FontSelectorForm._instance.focus_force()
             return
 
         FontSelectorForm._instance = self
@@ -31,17 +32,17 @@ class FontSelectorForm:
         self.panel_color = self.theme.get("panel", self.bg_color)
         self.panel_fg = self.theme.get("panel_fg", self.fg_color)
 
-        self.root = tk.Toplevel(root)
-        self.root.title("Font Selector")
-        self.root.configure(bg=self.bg_color)
-        self.root.attributes("-topmost", True)
+        super().__init__(root, "font_selector")
+        self.title("Font Selector")
+        self.configure(bg=self.bg_color)
+        self.attributes("-topmost", True)
         
         # Scala UI
         scale = float(self.config.get("ui_scale", 1.0))
-        self.root.minsize(int(420 * scale), int(340 * scale))
-        self.root.resizable(True, True)
+        self.minsize(int(420 * scale), int(340 * scale))
+        self.resizable(True, True)
 
-        apply_background_picture(self.root, config)
+        apply_background_picture(self, config)
 
         # Font base per i controlli
         self._font = (self.config.get("font_family", "Segoe UI"), int(self.config.get("font_size", 10) * scale))
@@ -49,7 +50,7 @@ class FontSelectorForm:
         # ---------------- WINDOW STYLE ----------------
         try:
             if os.name == "nt":
-                self.root.attributes("-toolwindow", True)
+                self.attributes("-toolwindow", True)
         except:
             pass
         # ---------------------------------------------
@@ -61,10 +62,10 @@ class FontSelectorForm:
             icon_path_linux = os.path.join(base_path, "resources", "josm_tagger.png")
 
             if os.name == "nt" and os.path.exists(icon_path_win):
-                self.root.iconbitmap(icon_path_win)
+                self.iconbitmap(icon_path_win)
             elif os.path.exists(icon_path_linux):
                 icon_img = tk.PhotoImage(file=icon_path_linux)
-                self.root.iconphoto(True, icon_img)
+                self.iconphoto(True, icon_img)
                 self._icon_img = icon_img
         except:
             pass
@@ -87,7 +88,7 @@ class FontSelectorForm:
         self.load_fonts()
         
         # Applica tema globale
-        apply_theme_colors(self.root, self.config)
+        apply_theme_colors(self, self.config)
         self._apply_custom_styles()
 
         self.font_var.trace_add("write", self._on_font_var_changed)
@@ -96,9 +97,9 @@ class FontSelectorForm:
         self.update_preview()
 
         # ---------------- FOCUS ----------------
-        self.root.lift()
-        self.root.focus_force()
-        self.root.after(10, self.root.focus_force)
+        self.lift()
+        self.focus_force()
+        self.after(10, self.focus_force)
         # --------------------------------------
 
     def _apply_custom_styles(self):
@@ -130,11 +131,11 @@ class FontSelectorForm:
             for child in widget.winfo_children():
                 apply(child)
         
-        apply(self.root)
+        apply(self)
 
     def build_ui(self):
 
-        top = tk.Frame(self.root, bg=self.bg_color)
+        top = tk.Frame(self, bg=self.bg_color)
         top.pack(fill="x", padx=8, pady=6)
 
         top.grid_columnconfigure(1, weight=1)
@@ -157,7 +158,7 @@ class FontSelectorForm:
 
         # ---------------- FONT LIST ----------------
 
-        list_frame = tk.Frame(self.root, bg=self.bg_color)
+        list_frame = tk.Frame(self, bg=self.bg_color)
         list_frame.pack(fill="both", expand=True, padx=8, pady=6)
 
         self.font_list = tk.Listbox(list_frame)
@@ -173,10 +174,10 @@ class FontSelectorForm:
 
         # ---------------- PREVIEW ----------------
 
-        tk.Label(self.root, text="Preview:", bg=self.bg_color, fg=self.fg_color).pack(anchor="w", padx=8)
+        tk.Label(self, text="Preview:", bg=self.bg_color, fg=self.fg_color).pack(anchor="w", padx=8)
 
         self.preview_label = tk.Label(
-            self.root,
+            self,
             text="The quick brown fox jumps over the lazy dog",
             bg=self.panel_color,
             fg=self.panel_fg,
@@ -188,11 +189,11 @@ class FontSelectorForm:
 
         # ---------------- BUTTONS ----------------
 
-        btn_frame = tk.Frame(self.root, bg=self.bg_color)
+        btn_frame = tk.Frame(self, bg=self.bg_color)
         btn_frame.pack(pady=6)
 
         tk.Button(btn_frame, text="Apply", command=self.apply, width=10).pack(side="left", padx=4)
-        tk.Button(btn_frame, text="Cancel", command=self.root.destroy, width=10).pack(side="left", padx=4)
+        tk.Button(btn_frame, text="Cancel", command=self.destroy, width=10).pack(side="left", padx=4)
 
     # --------------------------------------------------
 
@@ -295,4 +296,4 @@ class FontSelectorForm:
             self.apply_callback(self.config)
 
 
-        self.root.destroy()
+        self.destroy()

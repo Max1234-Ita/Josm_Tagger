@@ -4,9 +4,10 @@ from typing import Dict, List, Any, Optional, Tuple
 import os
 import sys
 from effects import get_active_theme, apply_theme_colors, apply_background_picture
+from forms.base_form import BaseForm
 
 
-def _clamp_to_monitor(window: tk.Toplevel, x: int, y: int) -> Tuple[int, int]:
+def _clamp_to_monitor(window, x: int, y: int) -> Tuple[int, int]:
     """Clamp x,y so the window stays on screen."""
     try:
         sw = window.winfo_screenwidth()
@@ -21,7 +22,7 @@ def _clamp_to_monitor(window: tk.Toplevel, x: int, y: int) -> Tuple[int, int]:
         return x, y
 
 
-class SearchForm:
+class SearchForm(BaseForm):
     """
     SearchForm: finestra Toplevel singleton per cercare codici e tag.
     Uso:
@@ -33,14 +34,13 @@ class SearchForm:
 
     def __init__(self, parent, codes: Dict[str, List[Dict[str, str]]], config: Dict[str, Any]):
         # Singleton: se esiste e la finestra è ancora valida, la porta in primo piano
-        if SearchForm._instance and getattr(SearchForm._instance, "root", None):
+        if SearchForm._instance and SearchForm._instance.winfo_exists():
             try:
                 inst = SearchForm._instance
-                if inst.root.winfo_exists():
-                    inst.root.deiconify()
-                    inst.root.lift()
-                    inst.root.focus_force()
-                    return
+                inst.deiconify()
+                inst.lift()
+                inst.focus_force()
+                return
             except Exception:
                 pass
 
@@ -52,14 +52,10 @@ class SearchForm:
         self.config = config or {}
 
         # crea Toplevel usando il root della mainform se disponibile
-        master = getattr(parent, "root", None) or getattr(parent, "master", None) or None
-        if master is None:
-            # fallback: crea Toplevel senza master
-            self.root = tk.Toplevel()
-        else:
-            self.root = tk.Toplevel(master)
+        master = getattr(parent, "root", None) or getattr(parent, "master", None) or parent
 
-        self.root.title("Search")
+        super().__init__(master, "search")
+        self.title("Search")
         
         # Carica configurazione e tema
         self.theme = get_active_theme(self.config)
@@ -68,20 +64,20 @@ class SearchForm:
         self.panel_color = self.theme.get("panel", self.bg_color)
         self.panel_fg = self.theme.get("panel_fg", self.fg_color)
         
-        self.root.configure(bg=self.bg_color)
+        self.configure(bg=self.bg_color)
         
         # Applica Scala UI e Font
         self._apply_ui_scaling()
 
         # Applica Minsize scalata
         scale = float(self.config.get("ui_scale", 1.0))
-        self.root.minsize(int(620 * scale), int(500 * scale))
+        self.minsize(int(620 * scale), int(500 * scale))
 
         # Applica Icona (Windows/Linux)
         self._apply_icon()
         
         try:
-            self.root.attributes("-topmost", True)
+            self.attributes("-topmost", True)
         except Exception:
             pass
 
@@ -103,8 +99,8 @@ class SearchForm:
         except Exception:
             pass
 
-        self.root.protocol("WM_DELETE_WINDOW", self._close)
-        self.root.focus_force()
+        self.protocol("WM_DELETE_WINDOW", self._close)
+        self.focus_force()
 
     def _apply_ui_scaling(self):
         """Applica la scala UI e il font configurato."""
@@ -117,7 +113,7 @@ class SearchForm:
         
         # Applica scaling a livello di Tk se possibile
         try:
-            self.root.tk.call('tk', 'scaling', scale * 1.33) # 1.33 è il fattore tipico per 96 DPI
+            self.tk.call('tk', 'scaling', scale * 1.33) # 1.33 è il fattore tipico per 96 DPI
         except:
             pass
 
@@ -130,22 +126,22 @@ class SearchForm:
             if sys.platform.startswith("win"):
                 icon_path = os.path.join(base_path, "resources", "josm_tagger.ico")
                 if os.path.exists(icon_path):
-                    self.root.iconbitmap(icon_path)
+                    self.iconbitmap(icon_path)
             else:
                 icon_path = os.path.join(base_path, "resources", "josm_tagger.png")
                 if os.path.exists(icon_path):
                     img = tk.PhotoImage(file=icon_path)
-                    self.root.iconphoto(True, img)
+                    self.iconphoto(True, img)
         except Exception as e:
             print(f"DEBUG: Could not set icon: {e}")
 
     def apply_theme(self):
         """Applica i colori del tema e l'immagine di sfondo."""
-        apply_theme_colors(self.root, self.config)
-        apply_background_picture(self.root, self.config)
+        apply_theme_colors(self, self.config)
+        apply_background_picture(self, self.config)
         
         # Correzioni specifiche per ttk
-        style = ttk.Style(self.root)
+        style = ttk.Style(self)
         if "clam" in style.theme_names():
             style.theme_use("clam")
             
@@ -172,7 +168,7 @@ class SearchForm:
     def _build_ui(self):
         """Costruisce l'interfaccia completa secondo il mockup."""
         # stile per la treeview
-        style = ttk.Style(self.root)
+        style = ttk.Style(self)
         style.theme_use("clam")
         try:
             style.configure("Search.Treeview", rowheight=int(25 * float(self.config.get("ui_scale", 1.0))))
@@ -183,7 +179,7 @@ class SearchForm:
             pass
 
         # Container principale con padding
-        main_container = tk.Frame(self.root, bg=self.bg_color)
+        main_container = tk.Frame(self, bg=self.bg_color)
         main_container.pack(fill="both", expand=True, padx=10, pady=10)
 
         # 1. ISTRUZIONI
@@ -280,7 +276,7 @@ class SearchForm:
         self.close_btn.pack(side="right")
 
         # context menu
-        self.context_menu = tk.Menu(self.root, tearoff=0)
+        self.context_menu = tk.Menu(self, tearoff=0)
         self.context_menu.add_command(label="Use", command=self._context_use)
         self.context_menu.add_command(label="Edit", command=self._context_edit)
 
@@ -291,7 +287,7 @@ class SearchForm:
 
     # ---------------- RESULTS POPULATION ----------------
     def _update_results(self):
-        """Popola la tree con i risultati filtrati."""
+        """Popola la tree con i risultati filtrati in ordine alfabetico per Code."""
         query = self.query_var.get().strip().lower()
         f_codes = self.filter_codes.get()
         f_keys = self.filter_keys.get()
@@ -299,6 +295,7 @@ class SearchForm:
 
         self.tree.delete(*self.tree.get_children())
         self.filtered = []
+        matches = []
 
         for code, tags in (self.codes.items() if isinstance(self.codes, dict) else []):
             code_l = code.lower()
@@ -324,19 +321,23 @@ class SearchForm:
 
             if match:
                 tag_str = "; ".join(f"{t.get('key','')}={t.get('value','')}" for t in tags)
-                self.filtered.append(code)
-                try:
-                    self.tree.insert("", "end", iid=code, values=(code, tag_str))
-                except Exception:
-                    self.tree.insert("", "end", values=(code, tag_str))
+                matches.append((code, tag_str))
 
-        self.filtered.sort()
+        # Ordinamento alfabetico per Code
+        matches.sort(key=lambda x: x[0].lower())
+
+        for code, tag_str in matches:
+            self.filtered.append(code)
+            try:
+                self.tree.insert("", "end", iid=code, values=(code, tag_str))
+            except Exception:
+                self.tree.insert("", "end", values=(code, tag_str))
 
     # ---------------- POSITIONING ----------------
     def _place_near_parent_offset(self):
         """Posiziona la finestra vicino alla mainform con un offset."""
         try:
-            self.root.update_idletasks()
+            self.update_idletasks()
             parent_root = getattr(self.mainform, "root", None) or self.mainform
             px = parent_root.winfo_x()
             py = parent_root.winfo_y()
@@ -352,16 +353,16 @@ class SearchForm:
             target_x = cx + ox
             target_y = cy + oy
 
-            final_x, final_y = _clamp_to_monitor(self.root, target_x, target_y)
-            self.root.geometry(f"+{final_x}+{final_y}")
+            final_x, final_y = _clamp_to_monitor(self, target_x, target_y)
+            self.geometry(f"+{final_x}+{final_y}")
         except Exception:
             # Centra sullo schermo
             try:
-                sw = self.root.winfo_screenwidth()
-                sh = self.root.winfo_screenheight()
-                w = self.root.winfo_reqwidth() or 600
-                h = self.root.winfo_reqheight() or 400
-                self.root.geometry(f"+{(sw-w)//2}+{(sh-h)//2}")
+                sw = self.winfo_screenwidth()
+                sh = self.winfo_screenheight()
+                w = self.winfo_reqwidth() or 600
+                h = self.winfo_reqheight() or 400
+                self.geometry(f"+{(sw-w)//2}+{(sh-h)//2}")
             except Exception:
                 pass
 
@@ -426,8 +427,8 @@ class SearchForm:
         """Copia il codice nella clipboard, chiude la search e prova a inserirlo nella mainform."""
         try:
             try:
-                self.root.clipboard_clear()
-                self.root.clipboard_append(code)
+                self.clipboard_clear()
+                self.clipboard_append(code)
             except Exception:
                 pass
 
@@ -455,12 +456,12 @@ class SearchForm:
     def _close(self):
         """Chiude la finestra SearchForm."""
         try:
-            if getattr(self, "root", None) and self.root.winfo_exists():
+            if self.winfo_exists():
                 try:
-                    self.root.withdraw()
+                    self.withdraw()
                 except Exception:
                     try:
-                        self.root.destroy()
+                        self.destroy()
                     except Exception:
                         pass
         finally:

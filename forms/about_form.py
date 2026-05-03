@@ -5,6 +5,7 @@ import sys
 
 from main import appinfo
 from effects import apply_background_picture, apply_theme_colors, get_active_theme
+from forms.base_form import BaseForm
 
 
 def resource_path(relative_path):
@@ -16,7 +17,7 @@ def resource_path(relative_path):
     return os.path.join(base_path, relative_path)
 
 
-class AboutForm:
+class AboutForm(BaseForm):
 
     _instance = None
     MAX_SIZE = 1200
@@ -30,29 +31,28 @@ class AboutForm:
             except:
                 AboutForm._instance = None
 
-        self.root = root
         self.config = config if config else {}
 
-        self.window = tk.Toplevel(root)
-        AboutForm._instance = self.window
+        super().__init__(root, "about")
+        AboutForm._instance = self
 
-        self.window.title("About")
-        self.window.attributes("-topmost", True)
+        self.title("About")
+        self.attributes("-topmost", True)
         
         # Tema
         theme = get_active_theme(self.config)
         self.bg_color = theme.get("bg", "#f0f0f0")
         self.fg_color = theme.get("fg", "#101010")
-        self.window.configure(bg=self.bg_color)
+        self.configure(bg=self.bg_color)
         
-        apply_background_picture(self.window, self.config)
+        apply_background_picture(self, self.config)
 
         # Disable resize
-        self.window.resizable(False, False)
+        self.resizable(False, False)
 
         # Hide minimize and maximize (on Windows)
         try:
-            self.window.attributes("-toolwindow", True)
+            self.attributes("-toolwindow", True)
         except:
             pass
 
@@ -60,7 +60,7 @@ class AboutForm:
         try:
             icon_path = resource_path(os.path.join("resources", "josm_tagger.png"))
             self.raw_image = tk.PhotoImage(file=icon_path)
-            self.window.iconphoto(True, self.raw_image)
+            self.iconphoto(True, self.raw_image)
         except:
             self.raw_image = None
 
@@ -68,7 +68,7 @@ class AboutForm:
         self._load_geometry()
 
         # Main frame
-        main_frame = tk.Frame(self.window, bg=self.bg_color)
+        main_frame = tk.Frame(self, bg=self.bg_color)
         main_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         # Image label (initially empty)
@@ -90,17 +90,17 @@ class AboutForm:
         info_label.pack(anchor="center", pady=(10, 10))
 
         # Applica tema globale ricorsivamente
-        apply_theme_colors(self.window, self.config)
+        apply_theme_colors(self, self.config)
 
         # Handle close
-        self.window.protocol("WM_DELETE_WINDOW", self._on_close)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Update layout and scale image proportionally
-        self.window.update_idletasks()
+        self.update_idletasks()
         self._update_scaled_image()
 
         # Set focus to the window
-        self.window.focus_force()
+        self.focus_force()
 
     def _get_scaled_image(self, image):
         if not image:
@@ -126,17 +126,17 @@ class AboutForm:
         return image.subsample(subsample_x, subsample_y)
 
     def _enforce_max_size(self):
-        w = self.window.winfo_width()
-        h = self.window.winfo_height()
+        w = self.winfo_width()
+        h = self.winfo_height()
 
         w = min(w, AboutForm.MAX_SIZE)
         h = min(h, AboutForm.MAX_SIZE)
 
-        self.window.geometry(f"{w}x{h}")
+        self.geometry(f"{w}x{h}")
 
     def _on_close(self):
         try:
-            self.window.destroy()
+            self.destroy()
         finally:
             AboutForm._instance = None
 
@@ -145,7 +145,7 @@ class AboutForm:
         default_h = 260
 
         if not self.config:
-            self.window.geometry(f"{default_w}x{default_h}")
+            self.geometry(f"{default_w}x{default_h}")
             return
 
         geom = self.config.get("about_form_geometry")
@@ -165,17 +165,17 @@ class AboutForm:
                 w = min(w, AboutForm.MAX_SIZE)
                 h = min(h, AboutForm.MAX_SIZE)
 
-                self.window.geometry(f"{w}x{h}")
+                self.geometry(f"{w}x{h}")
             except:
-                self.window.geometry(f"{default_w}x{default_h}")
+                self.geometry(f"{default_w}x{default_h}")
         else:
-            self.window.geometry(f"{default_w}x{default_h}")
+            self.geometry(f"{default_w}x{default_h}")
 
     def _save_geometry(self):
         if not self.config:
             return
 
-        self.config["about_form_geometry"] = self.window.geometry()
+        self.config["about_form_geometry"] = self.geometry()
         save_config(self.config)
 
     def _update_scaled_image(self):
@@ -183,7 +183,7 @@ class AboutForm:
             return
 
         # Available dimensions in the frame
-        frame_w = self.window.winfo_width() - 40
+        frame_w = self.winfo_width() - 40
         max_image_h = 200  # fixed max height for the image
 
         if frame_w <= 0:

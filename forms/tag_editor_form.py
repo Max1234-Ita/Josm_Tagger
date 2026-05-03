@@ -6,7 +6,9 @@ import tkinter.ttk as ttk
 from tkinter import messagebox, simpledialog
 
 from codes_manager import save_codes
+import effects
 from effects import apply_background_picture, apply_theme_colors, get_active_theme
+from forms.base_form import BaseForm
 
 
 def _monitor_workarea_from_point(x, y, fallback_window):
@@ -70,22 +72,22 @@ def _clamp_to_monitor(window, x, y):
         return x, y
 
 
-class TagPropertiesForm:
+class TagPropertiesForm(BaseForm):
     def __init__(self, parent, config, key_value=None):
         self.config = config
         self.result = None
-        self.root = tk.Toplevel(parent)
-        self.root.title("Tag properties")
-        self.root.attributes("-topmost", True)
+        super().__init__(parent, "tag_properties")
+        self.title("Tag properties")
+        self.attributes("-topmost", True)
         try:
-            self.root.attributes("-toolwindow", True)
+            self.attributes("-toolwindow", True)
         except Exception:
             pass
-        self.root.resizable(False, False)
-        self.root.transient(parent)
-        self.root.grab_set()
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
 
-        apply_background_picture(self.root, self.config)
+        apply_background_picture(self, self.config)
         self._set_icon()
 
         self.key_var = tk.StringVar(value=(key_value or {}).get("key", ""))
@@ -96,8 +98,8 @@ class TagPropertiesForm:
         self._apply_theme()
         self._place_near_pointer()
 
-        self.root.protocol("WM_DELETE_WINDOW", self._on_cancel)
-        self.root.focus_force()
+        self.protocol("WM_DELETE_WINDOW", self._on_cancel)
+        self.focus_force()
 
     def _set_icon(self):
         base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -105,15 +107,15 @@ class TagPropertiesForm:
         png_path = os.path.join(base_dir, "resources", "josm_tagger.png")
         try:
             if sys.platform.startswith("win") and os.path.exists(ico_path):
-                self.root.iconbitmap(ico_path)
+                self.iconbitmap(ico_path)
             elif os.path.exists(png_path):
                 self._icon_img = tk.PhotoImage(file=png_path)
-                self.root.iconphoto(True, self._icon_img)
+                self.iconphoto(True, self._icon_img)
         except Exception:
             pass
 
     def _build_ui(self):
-        main = tk.Frame(self.root)
+        main = tk.Frame(self)
         main.pack(fill="both", expand=True, padx=8, pady=8)
 
         tk.Label(main, text="Key:").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 6))
@@ -138,7 +140,7 @@ class TagPropertiesForm:
             self.config.get("font_family", "Segoe UI"),
             self.config.get("font_size", 10),
         )
-        self.root.option_add("*Font", font_conf)
+        self.option_add("*Font", font_conf)
 
         def apply(widget):
             try:
@@ -148,48 +150,48 @@ class TagPropertiesForm:
             for child in widget.winfo_children():
                 apply(child)
 
-        apply(self.root)
+        apply(self)
 
     def _apply_theme(self):
-        apply_theme_colors(self.root, self.config)
+        apply_theme_colors(self, self.config)
         theme = get_active_theme(self.config)
         p_fg = theme.get("panel_fg")
         p_bg = theme.get("panel")
-        for child in self.root.winfo_children():
+        for child in self.winfo_children():
             for w in child.winfo_children():
                 if isinstance(w, tk.Entry):
                     w.configure(bg=p_bg, fg=p_fg, insertbackground=p_fg)
 
     def _place_near_pointer(self):
-        self.root.update_idletasks()
-        px = self.root.winfo_pointerx()
-        py = self.root.winfo_pointery()
-        x, y = _clamp_to_monitor(self.root, px + 12, py + 12)
-        self.root.geometry(f"+{x}+{y}")
+        self.update_idletasks()
+        px = self.winfo_pointerx()
+        py = self.winfo_pointery()
+        x, y = _clamp_to_monitor(self, px + 12, py + 12)
+        self.geometry(f"+{x}+{y}")
 
     def _on_ok(self):
         key = self.key_var.get().strip()
         value = self.value_var.get().strip()
         if not key or not value:
-            messagebox.showwarning("Warning", "Key and value are required", parent=self.root)
+            messagebox.showwarning("Warning", "Key and value are required", parent=self)
             return
         self.result = {"key": key, "value": value}
-        self.root.destroy()
+        self.destroy()
 
     def _on_cancel(self):
         self.result = None
-        self.root.destroy()
+        self.destroy()
 
 
-class TagEditorForm:
+class TagEditorForm(BaseForm):
     _instance = None
 
     def __init__(self, root, codes, on_save_callback=None, config=None, preload_code=None):
-        if TagEditorForm._instance and TagEditorForm._instance.root.winfo_exists():
+        if TagEditorForm._instance and TagEditorForm._instance.winfo_exists():
             inst = TagEditorForm._instance
-            inst.root.deiconify()
-            inst.root.lift()
-            inst.root.focus_force()
+            inst.deiconify()
+            inst.lift()
+            inst.focus_force()
             if preload_code:
                 inst.load_code(preload_code)
             return
@@ -203,16 +205,16 @@ class TagEditorForm:
         self.preload_code = preload_code
         self.current_code = None
 
-        self.root = tk.Toplevel(root)
-        self.root.title("Tag Editor")
-        self.root.attributes("-topmost", True)
+        super().__init__(root, "tag_editor")
+        self.title("Tag Editor")
+        self.attributes("-topmost", True)
         try:
-            self.root.attributes("-toolwindow", True)
+            self.attributes("-toolwindow", True)
         except Exception:
             pass
-        self.root.minsize(450, 300)
-        self.root.resizable(False, False)
-        apply_background_picture(self.root, self.config)
+        self.minsize(450, 300)
+        self.resizable(False, False)
+        apply_background_picture(self, self.config)
         self._set_icon()
 
         self._trace_id = None
@@ -234,12 +236,12 @@ class TagEditorForm:
         self.entry_code["values"] = sorted(self.working_codes.keys())
         self.update_code_list()
 
-        self.root.protocol("WM_DELETE_WINDOW", self.cancel)
-        self.root.update_idletasks()
+        self.protocol("WM_DELETE_WINDOW", self.cancel)
+        self.update_idletasks()
         self._place_near_pointer_with_parent_offset(root)
-        self.root.deiconify()
-        self.root.lift()
-        self.root.focus_force()
+        self.deiconify()
+        self.lift()
+        self.focus_force()
 
         if self.preload_code:
             self.load_code(self.preload_code)
@@ -250,24 +252,24 @@ class TagEditorForm:
         png_path = os.path.join(base_dir, "resources", "josm_tagger.png")
         try:
             if sys.platform.startswith("win") and os.path.exists(ico_path):
-                self.root.iconbitmap(ico_path)
+                self.iconbitmap(ico_path)
             elif os.path.exists(png_path):
                 self._icon_img = tk.PhotoImage(file=png_path)
-                self.root.iconphoto(True, self._icon_img)
+                self.iconphoto(True, self._icon_img)
         except Exception:
             pass
 
     def _place_near_pointer_with_parent_offset(self, parent):
-        self.root.update_idletasks()
-        px = self.root.winfo_pointerx()
-        py = self.root.winfo_pointery()
+        self.update_idletasks()
+        px = self.winfo_pointerx()
+        py = self.winfo_pointery()
         ox = int(parent.winfo_width() * 0.30)
         oy = int(parent.winfo_height() * 0.30)
-        x, y = _clamp_to_monitor(self.root, px + ox, py + oy)
-        self.root.geometry(f"+{x}+{y}")
+        x, y = _clamp_to_monitor(self, px + ox, py + oy)
+        self.geometry(f"+{x}+{y}")
 
     def build_ui(self):
-        top_frame = tk.Frame(self.root)
+        top_frame = tk.Frame(self)
         top_frame.pack(fill="x", padx=6, pady=6)
 
         tk.Label(top_frame, text="Code:").pack(side="left")
@@ -276,7 +278,7 @@ class TagEditorForm:
 
         tk.Button(top_frame, text="New", command=self.new_code).pack(side="right", padx=4)
 
-        paned = tk.PanedWindow(self.root, orient="horizontal", sashrelief="raised")
+        paned = tk.PanedWindow(self, orient="horizontal", sashrelief="raised")
         paned.pack(fill="both", expand=True, padx=6, pady=6)
 
         left_frame = tk.Frame(paned)
@@ -312,10 +314,10 @@ class TagEditorForm:
 
         paned.add(right_frame, minsize=300)
 
-        self.tag_context_menu = tk.Menu(self.root, tearoff=0)
-        self.code_context_menu = tk.Menu(self.root, tearoff=0)
+        self.tag_context_menu = tk.Menu(self, tearoff=0)
+        self.code_context_menu = tk.Menu(self, tearoff=0)
 
-        bottom = tk.Frame(self.root)
+        bottom = tk.Frame(self)
         bottom.pack(fill="x", padx=6, pady=(0, 6))
         tk.Button(bottom, text="OK", width=10, command=self.ok).pack(side="right", padx=(4, 0))
         tk.Button(bottom, text="Cancel", width=10, command=self.cancel).pack(side="right")
@@ -450,8 +452,8 @@ class TagEditorForm:
             self.tag_list.insert(tk.END, f"{t['key']} = {t['value']}")
 
     def _open_tag_properties(self, initial=None):
-        form = TagPropertiesForm(self.root, config=self.config, key_value=initial)
-        self.root.wait_window(form.root)
+        form = TagPropertiesForm(self, config=self.config, key_value=initial)
+        self.wait_window(form)
         return form.result
 
     def add_tag(self):
@@ -485,7 +487,7 @@ class TagEditorForm:
         self.update_tag_list()
 
     def new_code(self):
-        name = simpledialog.askstring("New Code", "Enter code name:", parent=self.root)
+        name = simpledialog.askstring("New Code", "Enter code name:", parent=self)
         if name:
             name = name.strip()
             if name in self.working_codes:
@@ -499,7 +501,7 @@ class TagEditorForm:
         if not self.current_code:
             return
         old = self.current_code
-        new = simpledialog.askstring("Rename", f"Rename '{old}' to:", initialvalue=old, parent=self.root)
+        new = simpledialog.askstring("Rename", f"Rename '{old}' to:", initialvalue=old, parent=self)
         if new:
             new = new.strip()
             if new == old:
@@ -528,11 +530,11 @@ class TagEditorForm:
         save_codes(self.source_codes)
         if self.on_save_callback:
             self.on_save_callback()
-        self.root.destroy()
+        self.destroy()
 
     def cancel(self):
         try:
-            self.root.destroy()
+            self.destroy()
         finally:
             TagEditorForm._instance = None
 
@@ -541,7 +543,7 @@ class TagEditorForm:
             self.config.get("font_family", "Segoe UI"),
             self.config.get("font_size", 10),
         )
-        self.root.option_add("*Font", font_conf)
+        self.option_add("*Font", font_conf)
 
         def apply(widget):
             try:
@@ -551,16 +553,16 @@ class TagEditorForm:
             for child in widget.winfo_children():
                 apply(child)
 
-        apply(self.root)
+        apply(self)
 
     def apply_theme(self):
-        apply_theme_colors(self.root, self.config)
+        apply_theme_colors(self, self.config)
         theme = get_active_theme(self.config)
         p_fg = theme.get("panel_fg")
         p_bg = theme.get("panel")
         
         # Stile TTK per Combobox
-        style = ttk.Style(self.root)
+        style = ttk.Style(self)
         if "clam" in style.theme_names():
             style.theme_use("clam")
             
@@ -571,8 +573,8 @@ class TagEditorForm:
                         arrowcolor=p_fg)
         
         # Dropdown colors
-        self.root.option_add("*TCombobox*Listbox.background", p_bg)
-        self.root.option_add("*TCombobox*Listbox.foreground", p_fg)
+        self.option_add("*TCombobox*Listbox.background", p_bg)
+        self.option_add("*TCombobox*Listbox.foreground", p_fg)
         
         def apply_extra(widget):
             if isinstance(widget, tk.Menu):
@@ -597,4 +599,4 @@ class TagEditorForm:
             for child in widget.winfo_children():
                 apply_extra(child)
         
-        apply_extra(self.root)
+        apply_extra(self)

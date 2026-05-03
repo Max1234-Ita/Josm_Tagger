@@ -18,8 +18,8 @@
     "panel": "#3d434e",
     "panel_fg": "#c0c0c0"
   },
-  "geometry_tag_editor": "833x436+204+247",
-  "geometry_font_selector": "363x419+250+293",
+  "geometry_tag_editor": "487x358+450+227",
+  "geometry_font_selector": "420x340+84+410",
   "about_form_geometry": "300x340+104+104",
   "geometry": {
     "main_form": {
@@ -47,25 +47,27 @@
   },
   "command_history_items": 20,
   "command_history": [
-    "t",
-    "tr",
+    "noa",
+    "bl2",
+    "eny",
+    "bl3",
+    "nn",
     "bg",
     "pfw",
-    "eny",
-    "fw",
-    "recy",
     "pser",
     "gar",
+    "t",
+    "tr",
+    "fw",
+    "recy",
     "tg",
-    "bl2",
-    "bl3",
     "tub",
     "leisw",
     "leig",
     "bf",
     "bl5",
-    "bl4",
-    "bl6",
-    "brw"
-  ]
+    "bl4"
+  ],
+  "geometry_search": "761x500+314+319",
+  "geometry_options": "312x532+815+225"
 }

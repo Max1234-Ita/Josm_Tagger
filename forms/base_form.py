@@ -1,10 +1,14 @@
 import tkinter as tk
 from config_manager import load_config, save_config
+import effects
 
 
 class BaseForm(tk.Toplevel):
 
     def __init__(self, parent, form_id):
+
+        # Segnala che stiamo aprendo un form per bloccare il fading del mainform
+        effects.is_any_form_opening = True
 
         super().__init__(parent)
 
@@ -19,6 +23,23 @@ class BaseForm(tk.Toplevel):
         self.bind("<Configure>", self._save_geometry)
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self.bind("<FocusIn>", self._on_focus_in_base)
+
+        # Ripristina il flag dopo un breve delay per sicurezza
+        self.after(200, self._reset_opening_flag)
+
+    def _on_focus_in_base(self, event=None):
+        """Quando una finestra secondaria prende il focus, ripristina main_form."""
+        try:
+            toplevel = self.parent.winfo_toplevel()
+            if hasattr(toplevel, "main_form_instance"):
+                toplevel.main_form_instance._on_focus_in()
+        except:
+            pass
+
+    def _reset_opening_flag(self):
+        effects.is_any_form_opening = False
 
     # --------------------------------
     # CONFIG KEY

@@ -32,6 +32,7 @@ from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
+import effects
 from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
 from josm_interface import send_tags
 from forms.tag_editor_form import TagEditorForm
@@ -82,6 +83,7 @@ class MainForm:
 
     def __init__(self, root):
         self.root = root
+        self.root.main_form_instance = self
         self.config = load_config()
         self.codes = load_codes()
 
@@ -853,7 +855,9 @@ class MainForm:
 
     def show_about(self):
         from forms.about_form import AboutForm
+        effects.fade_away = False
         AboutForm(self.root, self.config)
+        self.root.after(1500, self._restore_fade_away)
 
     def context_use(self):
         self.apply_from_list()
@@ -880,6 +884,9 @@ class MainForm:
             save_codes(self.codes)
             self.update_list()
             self.preview.delete(0, tk.END)
+
+    def _restore_fade_away(self):
+        effects.fade_away = True
 
     # ---------------- THEME ----------------
     def apply_theme(self):
@@ -976,7 +983,9 @@ class MainForm:
         apply(self.root)
 
     def select_font(self):
+        effects.fade_away = False
         FontSelectorForm(self.root, self.config, self.apply_font_config)
+        self.root.after(1500, self._restore_fade_away)
 
     def apply_font_config(self, new_config):
         self.config = new_config
@@ -1328,6 +1337,7 @@ class MainForm:
         self.entry.icursor(tk.END)
 
     def open_editor(self, code=None):
+        effects.fade_away = False
         TagEditorForm(
             self.root,
             self.codes,
@@ -1335,6 +1345,7 @@ class MainForm:
             config=self.config,
             preload_code=code
         )
+        self.root.after(1500, self._restore_fade_away)
 
     def open_preferences(self):
         if getattr(self, "_preferences_form", None) is not None:
@@ -1345,16 +1356,20 @@ class MainForm:
                 self._preferences_form = None
 
         from forms.options_form import OptionsForm
+        effects.fade_away = False
         self._preferences_form = OptionsForm(
             self.root,
             self.config,
             on_theme_toggle=self._apply_runtime_theme,
         )
         self._preferences_form.protocol("WM_DELETE_WINDOW", self._on_preferences_close)
+        self.root.after(1500, self._restore_fade_away)
 
     def open_search(self, event=None):
         from forms.search_form import SearchForm
+        effects.fade_away = False
         SearchForm(self, self.codes, self.config)
+        self.root.after(1500, self._restore_fade_away)
 
     def _apply_runtime_theme(self):
         active = get_active_theme(self.config)
@@ -1522,6 +1537,7 @@ class MainForm:
 
     def _on_focus_in(self, event=None):
         """Fade-in solo quando necessario, con debounce."""
+        effects.fade_away = True
 
         now = time.time()
 
@@ -1554,6 +1570,17 @@ class MainForm:
             duration_ms=duration
         )
 
+    def _has_open_secondary_windows(self):
+        """Verifica se ci sono altre finestre Toplevel aperte e visibili."""
+        try:
+            for child in self.root.winfo_children():
+                if isinstance(child, tk.Toplevel) and child.winfo_exists():
+                    if child.winfo_viewable():
+                        return True
+        except:
+            pass
+        return False
+
     def _on_focus_out(self, event=None):
         """Fade-out solo quando il focus esce DAVVERO dalla finestra, con debounce."""
 
@@ -1570,9 +1597,19 @@ class MainForm:
 
         self._last_focus_out = now
 
-        # 1) Blocco durante avvio o transizioni (es. menu)
-        if not self.allow_focus_out or self._block_focus_out:
-            print(f"Focus Out prevented (startup/blocked, allow={self.allow_focus_out}, block={self._block_focus_out})")
+        # 1) Blocco durante avvio o transizioni (es. menu) o se ci sono finestre secondarie aperte
+        if (not self.allow_focus_out or self._block_focus_out or 
+            getattr(effects, "is_any_form_opening", False) or 
+            self._has_open_secondary_windows()):
+            
+            if getattr(effects, "is_any_form_opening", False):
+                print("Focus Out prevented (internal form opening)")
+                # Abort fading e ripristina trasparenza attiva
+                self.fader.stop(reset_alpha=self.config.get("behaviour", {}).get("transparency_active", 100) / 100)
+            elif self._has_open_secondary_windows():
+                print("Focus Out prevented (secondary window open)")
+            else:
+                print(f"Focus Out prevented (startup/blocked, allow={self.allow_focus_out}, block={self._block_focus_out})")
             return
 
         # 2) Blocco durante invio tag
