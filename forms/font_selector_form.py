@@ -39,7 +39,7 @@ class FontSelectorForm(BaseForm):
         
         # Scala UI
         scale = float(self.config.get("ui_scale", 1.0))
-        self.minsize(int(420 * scale), int(340 * scale))
+        self.minsize(int(420 * scale), int(360 * scale))
         self.resizable(True, True)
 
         apply_background_picture(self, config)

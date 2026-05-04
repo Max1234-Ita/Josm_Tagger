@@ -55,6 +55,7 @@ class TransparencyFader:
                 except:
                     self.widget.attributes("-alpha", 1.0)
 
+                fade_away = True  # Ripristina il flag globale per il prossimo evento
                 self.owner._fade_in_progress = False
                 if self._fade_job:
                     self.widget.after_cancel(self._fade_job)

@@ -508,8 +508,14 @@ class MainForm:
 
         self.entry = ttk.Combobox(top, textvariable=self.code_var, width=10)
         self.entry.pack(fill="x", expand=True, side="left", padx=(4, 4))
+        
+        # Impedisce il fading all'apertura della tendina
+        self.entry.bind("<Button-1>", lambda e: setattr(effects, "fade_away", False))
+        self.entry.bind("<<ComboboxSelected>>", lambda e: self.root.after(100, self._restore_fade_away))
+
         self.entry.bind("<Return>", self.apply_code)
         self.entry.bind("<Down>", self.focus_list)
+        self.entry.bind("<Up>", self.show_history_menu_keyboard)
         self.entry.bind("<Escape>", self.clear_input)
         self.entry.bind("<Button-3>", self.show_history_menu)
         self.entry.bind("<Menu>", self.show_history_menu_keyboard)
@@ -1634,6 +1640,12 @@ class MainForm:
             focused_display = self.root.focus_displayof()
             if focused_display is not None:
                 print("Focus Out prevented (focus_displayof match)")
+                return
+
+            # Controllo grezzo del widget focalizzato tramite Tcl (copre popdown del Combobox)
+            raw_focus = self.root.tk.call('focus')
+            if raw_focus and ('.popdown' in str(raw_focus).lower() or '.tk_choice_list' in str(raw_focus).lower()):
+                print(f"Focus Out prevented (focus on popdown: {raw_focus})")
                 return
         except (KeyError, tk.TclError):
             pass
