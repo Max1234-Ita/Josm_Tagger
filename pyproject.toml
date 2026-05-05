@@ -10,7 +10,7 @@ author_email = "max1234ita@gmail.com"
 
 [tool.briefcase.app.josmtagger]
 formal_name = "JOSM Tagger"
-description = "A tool to speed up your mapping with JOSM"
+description = "Speed up your mapping"
 long_description = """JOSM Tagger is a productivity tool for OpenStreetMap contributors.
 It allows you to quickly apply preset tags to elements in JOSM using hotkeys and a searchable interface.
 """
