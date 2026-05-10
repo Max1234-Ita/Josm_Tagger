@@ -3,7 +3,7 @@
   "font_family": "Calibri",
   "font_size": 11,
   "ui_scale": 1.0,
-  "dark_theme_enabled": true,
+  "dark_theme_enabled": false,
   "theme": {
     "bg": "#f0f0f0",
     "fg": "#101010",
@@ -16,7 +16,7 @@
     "fg": "#949494",
     "picture": null,
     "panel": "#3d434e",
-    "panel_fg": "#c0c0c0"
+    "panel_fg": "#949494"
   },
   "geometry_tag_editor": "487x358+252+223",
   "geometry_font_selector": "420x360+873+258",
@@ -47,9 +47,11 @@
   },
   "command_history_items": 20,
   "command_history": [
+    "pser",
+    "eny",
+    "bw",
     "bg",
     "bh",
-    "eny",
     "pfw",
     "bl2",
     "bl4",
@@ -60,13 +62,11 @@
     "ony",
     "bl3",
     "nn",
-    "pser",
     "t",
     "tr",
     "fw",
     "tg",
-    "tub",
-    "leisw"
+    "tub"
   ],
   "geometry_search": "761x500+726+52",
   "geometry_options": "312x532+404+52"
