@@ -1,3 +1,4 @@
+
 import json
 
 CODES_FILE = "codes.json"

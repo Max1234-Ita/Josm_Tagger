@@ -1,3 +1,4 @@
+
 import tkinter as tk
 from tkinter import ttk
 from typing import Dict, List, Any, Optional, Tuple
@@ -18,6 +19,7 @@ def _clamp_to_monitor(window, x: int, y: int) -> Tuple[int, int]:
         final_x = max(0, min(x, sw - w))
         final_y = max(0, min(y, sh - h))
         return final_x, final_y
+
     except Exception:
         return x, y
 

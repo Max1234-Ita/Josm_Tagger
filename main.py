@@ -1,3 +1,4 @@
+
 from forms.main_form import MainForm
 from hotkeys import start_hotkeys
 import tkinter as tk

@@ -1,3 +1,4 @@
+
 import tkinter as tk
 from tkinter import font
 from config_manager import save_config
