@@ -1,74 +1,74 @@
-# This project was generated with 0.4.1 using template: https://github.com/beeware/briefcase-template @ v0.4.1
-[tool.briefcase]
-project_name = "JOSM Tagger"
-bundle = "com.max1234ita"
-version = "0.1.8"
-url = "https://github.com/Max1234-Ita/Josm_Tagger"
-license = "GPL-3.0-only"
-author = "Max1234-Ita"
-author_email = "max1234ita@gmail.com"
-
-[tool.briefcase.app.josmtagger]
-formal_name = "JOSM Tagger"
-description = "Speed up your mapping"
-long_description = """JOSM Tagger is a productivity tool for OpenStreetMap contributors.
-It allows you to quickly apply preset tags to elements in JOSM using hotkeys and a searchable interface.
-"""
-console = false
-sources = [
-    "main.py",
-    "forms",
-    "resources",
-    "codes_manager.py",
-    "config_manager.py",
-    "effects.py",
-    "hotkeys.py",
-    "josm_interface.py",
-    "codes.json",
-    "config.json",
-]
-test_sources = [
-    "tests",
-]
-
-requires = [
-    "keyboard==0.13.5",
-    "pyautogui==0.9.54",
-    "pillow==12.2.0",
-    "pystray @ git+https://github.com/moses-palmer/pystray.git",
-    "pyperclip==1.11.0",
-    "pynput==1.8.1",
-    "screeninfo==0.8.1",
-]
-test_requires = [
-    "pytest",
-]
-
-[tool.briefcase.app.josmtagger.macOS]
-universal_build = true
-requires = [
-    "std-library",
-]
-
-[tool.briefcase.app.josmtagger.linux]
-requires = [
-    "pynput",
-]
-
-[tool.briefcase.app.josmtagger.linux.system.debian]
-system_requires = [
-    "python3-tk",
-    "libcanberra-gtk-module",
-    "libcanberra-gtk3-module",
-]
-
-system_runtime_requires = [
-    "python3-tk",
-    "libcanberra-gtk3-0",
-]
-
-[tool.briefcase.app.josmtagger.windows]
-requires = [
-    "pywin32",
-]
-
+## This project was generated with 0.4.1 using template: https://github.com/beeware/briefcase-template @ v0.4.1
+#[tool.briefcase]
+#project_name = "JOSM Tagger"
+#bundle = "com.max1234ita"
+#version = "0.1.8"
+#url = "https://github.com/Max1234-Ita/Josm_Tagger"
+#license = "GPL-3.0-only"
+#author = "Max1234-Ita"
+#author_email = "max1234ita@gmail.com"
+#
+#[tool.briefcase.app.josmtagger]
+#formal_name = "JOSM Tagger"
+#description = "Speed up your mapping"
+#long_description = """JOSM Tagger is a productivity tool for OpenStreetMap contributors.
+#It allows you to quickly apply preset tags to elements in JOSM using hotkeys and a searchable interface.
+#"""
+#console = false
+#sources = [
+#    "main.py",
+#    "forms",
+#    "resources",
+#    "codes_manager.py",
+#    "config_manager.py",
+#    "effects.py",
+#    "hotkeys.py",
+#    "josm_interface.py",
+#    "codes.json",
+#    "config.json",
+#]
+#test_sources = [
+#    "tests",
+#]
+#
+#requires = [
+#    "keyboard==0.13.5",
+#    "pyautogui==0.9.54",
+#    "pillow==12.2.0",
+#    "pystray @ git+https://github.com/moses-palmer/pystray.git",
+#    "pyperclip==1.11.0",
+#    "pynput==1.8.1",
+#    "screeninfo==0.8.1",
+#]
+#test_requires = [
+#    "pytest",
+#]
+#
+#[tool.briefcase.app.josmtagger.macOS]
+#universal_build = true
+#requires = [
+#    "std-library",
+#]
+#
+#[tool.briefcase.app.josmtagger.linux]
+#requires = [
+#    "pynput",
+#]
+#
+#[tool.briefcase.app.josmtagger.linux.system.debian]
+#system_requires = [
+#    "python3-tk",
+#    "libcanberra-gtk-module",
+#    "libcanberra-gtk3-module",
+#]
+#
+#system_runtime_requires = [
+#    "python3-tk",
+#    "libcanberra-gtk3-0",
+#]
+#
+#[tool.briefcase.app.josmtagger.windows]
+#requires = [
+#    "pywin32",
+#]
+#

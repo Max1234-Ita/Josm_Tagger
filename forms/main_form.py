@@ -1001,10 +1001,29 @@ class MainForm:
 
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
-        keyboard.add_hotkey(
-            self.config.get("hotkey", "ctrl+num 0"),
-            lambda: self.root.after(0, self.hotkey_trigger)
-        )
+        try:
+            from pynput import keyboard as pynput_keyboard
+
+            hotkey_str = self.config.get("hotkey", "ctrl+num 0")
+
+            # Converti il formato "ctrl+num 0" al formato di pynput
+            # Esempio: "ctrl+num 0" -> "<ctrl>+<num 0>"
+            # pynput usa < > per i tasti speciali
+            pynput_hotkey = hotkey_str.replace("ctrl+", "<ctrl>+").replace("num ", "num_")
+            if not pynput_hotkey.startswith("<"):
+                pynput_hotkey = "<" + pynput_hotkey + ">"
+
+            listener = pynput_keyboard.GlobalHotKeys({
+                pynput_hotkey: lambda: self.root.after(0, self.hotkey_trigger)
+            })
+            listener.start()
+            print(f"Hotkey registered: {hotkey_str}")
+
+        except ImportError as e:
+            print(f"Warning: Could not register hotkey (running in debug mode or missing display): {e}")
+            print("Hotkeys will be disabled in this session.")
+        except Exception as e:
+            print(f"Warning: Failed to register hotkey: {e}")
 
     def hotkey_trigger(self):
         self.focus_input()
@@ -1146,8 +1165,8 @@ class MainForm:
         self._render_preview(code)
 
         def worker():
-            import pyautogui
-            pyautogui.FAILSAFE = False
+            # import pyautogui
+            # pyautogui.FAILSAFE = False
 
             print('Send Worker started')
 

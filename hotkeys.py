@@ -1,9 +1,10 @@
-
-from pynput import keyboard
 import threading
+
 
 def start_hotkeys(callback):
     def run():
+        from pynput import keyboard
+
         with keyboard.GlobalHotKeys({
             '<ctrl>+<alt>+t': callback
         }) as h:
