@@ -1643,6 +1643,11 @@ class MainForm:
             print("Focus Out prevented (sending)")
             return
 
+        beh = self.config.get("behaviour", {})
+        if beh.get("on_focus_loss", "do_nothing") != "fade_out":
+            print("Focus Out prevented (setting: do_nothing)")
+            return
+
         if not self.allow_fade:
             print("Focus Out prevented (fade disabled)")
             return
@@ -1671,7 +1676,6 @@ class MainForm:
             pass
 
         # 4) Se siamo già sbiaditi, non rifare il fade
-        beh = self.config.get("behaviour", {})
         target = beh.get("transparency_faded", 35) / 100
         current_alpha = float(self.root.attributes("-alpha"))
 
