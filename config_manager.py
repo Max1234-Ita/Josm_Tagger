@@ -5,6 +5,10 @@ import os
 CONFIG_FILE = "config.json"
 
 
+def config_path():
+    return os.path.abspath(CONFIG_FILE)
+
+
 # =========================
 # BASE CONFIG I/O
 # =========================

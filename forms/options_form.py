@@ -6,7 +6,7 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import colorchooser, filedialog, messagebox
 
-from config_manager import load_config, save_config
+from config_manager import config_path, load_config, save_config
 from effects import apply_background_picture, apply_theme_colors, get_active_theme
 from forms.base_form import BaseForm
 
@@ -378,6 +378,7 @@ class OptionsForm(BaseForm):
         beh["transparency_faded"] = int(self.transparency_faded_var.get())
         self.config.update(self.temp_config)
         save_config(self.config)
+        print(f"Preferences saved to {config_path()}: {beh}")
         self.destroy()
 
     def _on_cancel(self):

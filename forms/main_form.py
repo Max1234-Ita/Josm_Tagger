@@ -1,7 +1,6 @@
 
 import os
 import sys
-import json
 import time
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -33,6 +32,7 @@ from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
+from hotkeys import start_hotkeys
 import effects
 from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
 from josm_interface import send_tags
@@ -252,18 +252,22 @@ class MainForm:
         w = self.root.winfo_width()
         h = self.root.winfo_height()
 
-        if "geometry" not in self.config:
-            self.config["geometry"] = {}
+        cfg = load_config()
+        if not cfg:
+            cfg = dict(self.config)
 
-        self.config["geometry"]["main_form"] = {
+        if "geometry" not in cfg:
+            cfg["geometry"] = {}
+
+        cfg["geometry"]["main_form"] = {
             "x": x,
             "y": y,
             "w": w,
             "h": h
         }
 
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=2)
+        self.config = cfg
+        save_config(self.config)
 
     def _capture_current_normal_geometry(self):
         try:
@@ -298,22 +302,33 @@ class MainForm:
         if not self._last_normal_geometry:
             return
 
-        self.config.setdefault("geometry", {})
-        current = self.config["geometry"].get("main_form", {})
+        cfg = load_config()
+        if not cfg:
+            cfg = dict(self.config)
+
+        cfg.setdefault("geometry", {})
+        current = cfg["geometry"].get("main_form", {})
         if current != self._last_normal_geometry:
-            self.config["geometry"]["main_form"] = dict(self._last_normal_geometry)
+            cfg["geometry"]["main_form"] = dict(self._last_normal_geometry)
+            self.config = cfg
             save_config(self.config)
+        else:
+            self.config = cfg
 
     def save_config(self):
         """
         Save preview panel state and pane heights.
         """
-        self.config["preview_expanded"] = self.preview_expanded
-        self.config["preview_height"] = self.preview_height
-        self.config["upper_height"] = self.upper_height
+        cfg = load_config()
+        if not cfg:
+            cfg = dict(self.config)
 
-        with open("config.json", "w", encoding="utf-8") as f:
-            json.dump(self.config, f, indent=2)
+        cfg["preview_expanded"] = self.preview_expanded
+        cfg["preview_height"] = self.preview_height
+        cfg["upper_height"] = self.upper_height
+
+        self.config = cfg
+        save_config(self.config)
 
     # ---------------- MENU ----------------
     def build_menu(self):
@@ -1001,29 +1016,9 @@ class MainForm:
 
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
-        try:
-            from pynput import keyboard as pynput_keyboard
-
-            hotkey_str = self.config.get("hotkey", "ctrl+num 0")
-
-            # Converti il formato "ctrl+num 0" al formato di pynput
-            # Esempio: "ctrl+num 0" -> "<ctrl>+<num 0>"
-            # pynput usa < > per i tasti speciali
-            pynput_hotkey = hotkey_str.replace("ctrl+", "<ctrl>+").replace("num ", "num_")
-            if not pynput_hotkey.startswith("<"):
-                pynput_hotkey = "<" + pynput_hotkey + ">"
-
-            listener = pynput_keyboard.GlobalHotKeys({
-                pynput_hotkey: lambda: self.root.after(0, self.hotkey_trigger)
-            })
-            listener.start()
-            print(f"Hotkey registered: {hotkey_str}")
-
-        except ImportError as e:
-            print(f"Warning: Could not register hotkey (running in debug mode or missing display): {e}")
-            print("Hotkeys will be disabled in this session.")
-        except Exception as e:
-            print(f"Warning: Failed to register hotkey: {e}")
+        hotkey_str = self.config.get("hotkey", "ctrl+num 0")
+        start_hotkeys(lambda: self.root.after(0, self.hotkey_trigger), hotkey_str)
+        print(f"Hotkey registration requested: {hotkey_str}")
 
     def hotkey_trigger(self):
         self.focus_input()
@@ -1229,7 +1224,13 @@ class MainForm:
                     self.allow_fade = True
 
                     # Minimizza SOLO dopo che send ha finito
+                    try:
+                        self.config = load_config() or self.config
+                    except Exception:
+                        pass
+
                     beh = self.config.get("behaviour", {})
+                    print(f"Apply action: {beh.get('on_apply', 'keep_visible')}")
                     if beh.get("on_apply") == "minimize_to_tray":
                         hide_delay = int(beh.get("hide_delay", 150))
                         fade_duration = int(beh.get("fade_duration_ms", 300))
@@ -1286,7 +1287,13 @@ class MainForm:
         self.command_history = [c for c in self.command_history if c != code]
         self.command_history.insert(0, code)
         self.command_history = self.command_history[: self._get_history_limit()]
-        self.config["command_history"] = list(self.command_history)
+
+        cfg = load_config()
+        if not cfg:
+            cfg = dict(self.config)
+
+        cfg["command_history"] = list(self.command_history)
+        self.config = cfg
         save_config(self.config)
 
     def show_history_menu(self, event):
@@ -1459,8 +1466,14 @@ class MainForm:
             pass
 
     def _on_main_window_close(self):
+        try:
+            self.config = load_config() or self.config
+        except Exception:
+            pass
+
         beh = self.config.get("behaviour", {})
         action = beh.get("on_close", "minimize_to_tray")
+        print(f"Main window close action: {action}")
         if action == "exit_app":
             self._exit_app()
             return
@@ -1642,6 +1655,11 @@ class MainForm:
         if self._sending_in_progress:
             print("Focus Out prevented (sending)")
             return
+
+        try:
+            self.config = load_config() or self.config
+        except Exception:
+            pass
 
         beh = self.config.get("behaviour", {})
         if beh.get("on_focus_loss", "do_nothing") != "fade_out":

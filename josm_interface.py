@@ -312,21 +312,22 @@ def send_tags(pairs, main_root=None):
     """Send tags to JOSM (cross-platform)."""
     print("DEBUG: send_tags() called with pairs:", pairs)
 
-    # Rileva se siamo in debug mode cercando pydevd nei moduli caricati
     in_debug = 'pydevd' in sys.modules
 
-    if in_debug:
-        print("DEBUG MODE DETECTED: Printing tags instead of sending to JOSM")
-        for pair in pairs:
-            print(f"  [TAG] {pair['key']} = {pair['value']}")
-        print("DEBUG MODE: Tag sending skipped (no X11 display available)")
-        return
-
-    if platform.system() == "Linux" and _is_wayland_session():
-        if _send_tags_remote_control(pairs):
-            print("DEBUG: Tags sent through JOSM Remote Control")
+    if platform.system() == "Linux":
+        if in_debug:
+            # Check for Debug mode (Tag sending will work only in production environment)
+            print("DEBUG MODE DETECTED: Printing tags instead of sending to JOSM")
+            for pair in pairs:
+                print(f"  [TAG] {pair['key']} = {pair['value']}")
+            print("DEBUG MODE: Tag sending skipped (no X11 display available)")
             return
-        print("DEBUG: Remote Control fallback failed, trying keyboard path")
+
+        if _is_wayland_session():
+            if _send_tags_remote_control(pairs):
+                print("DEBUG: Tags sent through JOSM Remote Control")
+                return
+            print("DEBUG: Remote Control fallback failed, trying keyboard path")
 
     try:
         import pyautogui

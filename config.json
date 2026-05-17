@@ -19,12 +19,12 @@
     "panel_fg": "#949494"
   },
   "geometry_tag_editor": "487x358+252+223",
-  "geometry_font_selector": "420x360+873+258",
+  "geometry_font_selector": "420x360+42+125",
   "about_form_geometry": "300x340+104+104",
   "geometry": {
     "main_form": {
-      "x": 67,
-      "y": 210,
+      "x": 100,
+      "y": 306,
       "w": 256,
       "h": 320
     },
@@ -36,9 +36,9 @@
   "preview_height": 160,
   "upper_height": 160,
   "behaviour": {
-    "on_focus_loss": "do_nothing",
-    "on_apply": "keep_visible",
-    "on_close": "exit_app",
+    "on_focus_loss": "fade_out",
+    "on_apply": "minimize_to_tray",
+    "on_close": "minimize_to_tray",
     "transparency_active": 100,
     "transparency_faded": 35,
     "hide_delay": 150,
@@ -48,26 +48,26 @@
   "command_history_items": 20,
   "command_history": [
     "noa",
-    "bg",
     "pser",
+    "bh",
+    "bf",
+    "recy",
+    "scr",
+    "orc",
+    "bg",
+    "mdw",
+    "brw",
+    "b",
+    "wd",
+    "gar",
+    "eny",
+    "tt3",
     "pfw",
     "fl",
     "tr",
     "ppol",
-    "tt5",
-    "bh",
-    "eny",
-    "bl2",
-    "bl4",
-    "gar",
-    "bf",
-    "recy",
-    "ony",
-    "bl3",
-    "nn",
-    "t",
-    "fw"
+    "tt5"
   ],
   "geometry_search": "761x500+726+52",
-  "geometry_options": "350x592+275+396"
+  "geometry_options": "350x592+296+422"
 }
