@@ -43,30 +43,30 @@
     "transparency_faded": 35,
     "hide_delay": 150,
     "fade_delay": 120,
-    "fade_duration_ms": 500
+    "fade_duration_ms": 250
   },
   "command_history_items": 20,
   "command_history": [
-    "pser",
     "eny",
-    "bw",
+    "bl5",
     "bg",
+    "recy",
+    "t",
+    "bl2",
+    "pser",
+    "bw",
     "bh",
     "pfw",
-    "bl2",
     "bl4",
     "noa",
     "gar",
     "bf",
-    "recy",
     "ony",
     "bl3",
     "nn",
-    "t",
     "tr",
     "fw",
-    "tg",
-    "tub"
+    "tg"
   ],
   "geometry_search": "761x500+726+52",
   "geometry_options": "312x532+404+52"
