@@ -1515,17 +1515,28 @@ class MainForm:
         self.root.attributes("-topmost", True)
         self.root.after(50, lambda: self.root.attributes("-topmost", False))
 
-        # Fade-in
-        try:
-            for alpha in range(0, 101, 10):
-                self.root.attributes("-alpha", alpha / 100)
-                self.root.update_idletasks()
-                self.root.after(10)
-        except:
-            self.root.attributes("-alpha", 1)
+        # Focus immediato: l'utente deve poter scrivere anche durante il fade-in.
+        self._force_focus_on_entry()
+        self.root.after(30, self._force_focus_on_entry)
+        self.root.after(120, self._force_focus_on_entry)
 
-        # Forza focus DOPO il fade-in
-        self.root.after(200, self._force_focus_on_entry)
+        # Fade-in non bloccante
+        try:
+            beh = self.config.get("behaviour", {})
+            target = beh.get("transparency_active", 100) / 100
+            duration = int(beh.get("fade_duration_ms", 300))
+            current_alpha = float(self.root.attributes("-alpha"))
+
+            if current_alpha < target - 0.01:
+                self.fader.fade(
+                    start_alpha=current_alpha,
+                    end_alpha=target,
+                    duration_ms=duration
+                )
+            else:
+                self.root.attributes("-alpha", target)
+        except Exception:
+            self.root.attributes("-alpha", 1)
 
         # Sblocca focus-out quando la finestra è stabile
         self.root.after(500, lambda: setattr(self, "_block_focus_out", False))
