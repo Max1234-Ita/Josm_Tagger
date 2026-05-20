@@ -1,33 +1,9 @@
-
-# from forms.main_form import MainForm
-# from hotkeys import start_hotkeys
-# import tkinter as tk
-#
-# appname = 'JOSM Tagger'
-# appversion = '0.1.8'
-# author = 'By Max1234-ITA, 2026'
-# appinfo = f'{appname} v.{appversion}\n- {author} -'  # Full text to use in About
-#
-# appicon_ico = 'resources/josm_tagger.ico'  # Path to the icon file (relative to the script)
-# appicon_png = 'resources/josm_tagger.png'  # Path to the PNG icon file (relative to the script)
-#
-# # --- Functions ---
-# def on_hotkey(app):
-#     # Activate widget by pressing the Hotkey combination
-#     app.root.after(0, app.handle_hotkey)
-#
-#
-# def main():
-#     root = tk.Tk()              # create the main Tk window
-#     app = MainForm(root)        # pass root to the constructor
-#
-#     start_hotkeys(lambda: on_hotkey(app))
-#
-#     root.mainloop()
-#
-#     pass
-
 import main
+
+# This is just a wrapper to the main script.
+# It allows to run the main script without having to import it, which is useful for packaging and distribution.
+# It also allows to run the main script without having to worry about the name of the main function, which is useful for testing and debugging.
+#
 
 if __name__ == "__main__":
     main.main()

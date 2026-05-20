@@ -3,7 +3,7 @@ from forms.main_form import MainForm
 import tkinter as tk
 
 appname = 'JOSM Tagger'
-appversion = '0.1.8'
+appversion = '0.1.11-L'
 author = 'By Max1234-ITA, 2026'
 appinfo = f'{appname} v.{appversion}\n- {author} -'  # Full text to use in About
 
