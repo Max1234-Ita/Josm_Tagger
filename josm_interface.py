@@ -13,10 +13,26 @@ import pyperclip
 JOSM_REMOTE_BASE_URL = "http://127.0.0.1:8111"
 JOSM_REMOTE_AUTO_CONFIRM = True
 JOSM_REMOTE_CONFIRM_DELAY = 0.7
+JOSM_CONTROL_GUI_AUTOMATION = "gui_automation"
+JOSM_CONTROL_REMOTE = "remote_control"
 
 
 def _is_wayland_session():
     return os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
+
+
+def is_linux():
+    return platform.system() == "Linux"
+
+
+def resolve_control_method(control_method=None):
+    if is_linux():
+        return JOSM_CONTROL_REMOTE
+
+    if control_method == JOSM_CONTROL_REMOTE:
+        return JOSM_CONTROL_REMOTE
+
+    return JOSM_CONTROL_GUI_AUTOMATION
 
 
 def _remote_control_request(path, params=None):
@@ -94,6 +110,38 @@ def send_tags_remote_control(pairs):
     return False
 
 
+def send_tags_gui_automation(pairs, main_root=None):
+    if not focus_josm(main_root=main_root):
+        return False
+
+    pyautogui.hotkey("alt", "a")
+
+    time.sleep(0.2)
+
+    for i, p in enumerate(pairs):
+        print(f"Sending pair: {p['key']}={p['value']}")
+        pyautogui.hotkey("ctrl", "a")
+        pyautogui.press("delete")
+
+        pyperclip.copy(p["key"])
+        pyautogui.hotkey("ctrl", "v")
+
+        pyautogui.press("tab")
+
+        pyautogui.hotkey("ctrl", "a")
+        pyautogui.press("delete")
+
+        pyperclip.copy(p["value"])
+        pyautogui.hotkey("ctrl", "v")
+
+        if i < len(pairs) - 1:
+            pyautogui.hotkey("shift", "enter")
+        else:
+            pyautogui.press("enter")
+
+    return True
+
+
 def focus_josm(main_root=None):
 
     windows = gw.getWindowsWithTitle("Java OpenStreetMap Editor")
@@ -125,40 +173,11 @@ def focus_josm(main_root=None):
 
     return True
 
+def send_tags(pairs, main_root=None, control_method=None):
+    method = resolve_control_method(control_method)
+    print(f"Using JOSM control method: {method}")
 
-def send_tags(pairs, main_root=None):
+    if method == JOSM_CONTROL_REMOTE:
+        return send_tags_remote_control(pairs)
 
-    if platform.system() == "Linux" and _is_wayland_session():
-        if send_tags_remote_control(pairs):
-            return
-        print("Remote Control fallback failed, trying keyboard path")
-
-    if not focus_josm(main_root=main_root):
-        return
-
-    pyautogui.hotkey("alt", "a")
-
-    time.sleep(0.2)
-
-    for i, p in enumerate(pairs):
-        print(f"Sending pair: {p['key']}={p['value']}")
-        pyautogui.hotkey("ctrl", "a")
-        pyautogui.press("delete")
-
-        pyperclip.copy(p["key"])
-        pyautogui.hotkey("ctrl", "v")
-
-        pyautogui.press("tab")
-
-        pyautogui.hotkey("ctrl", "a")
-        pyautogui.press("delete")
-
-        pyperclip.copy(p["value"])
-        pyautogui.hotkey("ctrl", "v")
-
-        if i < len(pairs) - 1:
-            pyautogui.hotkey("shift", "enter")
-        else:
-            pyautogui.press("enter")
-
-    pass
+    return send_tags_gui_automation(pairs, main_root=main_root)

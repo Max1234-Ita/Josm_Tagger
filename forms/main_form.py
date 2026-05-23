@@ -1187,7 +1187,11 @@ class MainForm:
                     self._block_focus_out = False
                     return
 
-                send_tags(tags_list, main_root=self.root)
+                send_tags(
+                    tags_list,
+                    main_root=self.root,
+                    control_method=self.config.get("josm_control_method"),
+                )
 
             finally:
 

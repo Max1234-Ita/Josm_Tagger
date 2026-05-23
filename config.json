@@ -47,8 +47,9 @@
   },
   "command_history_items": 20,
   "command_history": [
-    "hcr",
     "bf",
+    "fw",
+    "hcr",
     "bh",
     "tt3",
     "eny",
@@ -65,10 +66,9 @@
     "bl4",
     "noa",
     "gar",
-    "ony",
-    "nn"
+    "ony"
   ],
   "geometry_search": "761x500+726+52",
   "geometry_options": "312x532+241+300",
-
+  "josm_control_method": "remote_control"
 }

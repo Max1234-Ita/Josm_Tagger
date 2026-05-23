@@ -8,6 +8,12 @@ from tkinter import colorchooser, filedialog, messagebox
 from config_manager import load_config, save_config
 from effects import apply_background_picture, apply_theme_colors, get_active_theme
 from forms.base_form import BaseForm
+from josm_interface import (
+    JOSM_CONTROL_GUI_AUTOMATION,
+    JOSM_CONTROL_REMOTE,
+    is_linux,
+    resolve_control_method,
+)
 
 
 class OptionsForm(BaseForm):
@@ -69,6 +75,9 @@ class OptionsForm(BaseForm):
         dark_theme.setdefault("panel_fg", "#d8d8d8")
         dark_theme.setdefault("picture", None)
         self.temp_config.setdefault("dark_theme_enabled", False)
+        self.temp_config.setdefault("josm_control_method", JOSM_CONTROL_GUI_AUTOMATION)
+        if is_linux():
+            self.temp_config["josm_control_method"] = JOSM_CONTROL_REMOTE
 
     def _configure_window_style(self):
         self.attributes("-topmost", True)
@@ -145,6 +154,15 @@ class OptionsForm(BaseForm):
 
         self.transparency_active_var = tk.IntVar(value=max(10, min(100, int(behaviour.get("transparency_active", 100)))))
         self.transparency_faded_var = tk.IntVar(value=max(10, min(100, int(behaviour.get("transparency_faded", 35)))))
+        self.josm_control_method_map = {
+            JOSM_CONTROL_GUI_AUTOMATION: "GUI Automation",
+            JOSM_CONTROL_REMOTE: "Remote Control",
+        }
+        self.josm_control_method_rev = {v: k for k, v in self.josm_control_method_map.items()}
+        selected_method = resolve_control_method(self.temp_config.get("josm_control_method"))
+        self.josm_control_method_var = tk.StringVar(
+            value=self.josm_control_method_map[selected_method]
+        )
 
     def _ensure_theme_bucket(self, key):
         bucket = self.temp_config.setdefault(key, {})
@@ -302,6 +320,7 @@ class OptionsForm(BaseForm):
         # BEHAVIOUR
         behaviour_frame = ttk.LabelFrame(main_frame, text="Behaviour")
         behaviour_frame.grid(row=1, column=0, sticky="nsew", padx=pad, pady=(0, pad))
+        behaviour_frame.columnconfigure(1, weight=1)
         
         ttk.Label(behaviour_frame, text="On Focus loss:", font=default_font).grid(row=0, column=0, sticky="e", padx=pad, pady=(pad, 0))
         self.ofl_combobox = ttk.Combobox(behaviour_frame, textvariable=self.on_focus_loss_var, values=list(self.on_focus_loss_map.values()), state="readonly", font=default_font)
@@ -333,9 +352,31 @@ class OptionsForm(BaseForm):
         self.tr_faded_spin.pack(side="left")
         ttk.Label(faded_cont, text="%", font=default_font).pack(side="left", padx=self._s(4))
 
+        # JOSM INTERFACE
+        josm_frame = ttk.LabelFrame(main_frame, text="JOSM Interface")
+        josm_frame.grid(row=2, column=0, sticky="nsew", padx=pad, pady=(0, pad))
+        josm_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(josm_frame, text="Method:", font=default_font).grid(
+            row=0, column=0, sticky="e", padx=pad, pady=pad
+        )
+        self.josm_method_combobox = ttk.Combobox(
+            josm_frame,
+            textvariable=self.josm_control_method_var,
+            values=list(self.josm_control_method_map.values()),
+            state="readonly",
+            font=default_font,
+        )
+        self.josm_method_combobox.grid(
+            row=0, column=1, columnspan=2, sticky="we", padx=(0, pad), pady=pad
+        )
+
+        if is_linux():
+            self.josm_method_combobox.state(["disabled"])
+
         # BUTTONS
         buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.grid(row=2, column=0, sticky="e", padx=pad, pady=(0, pad))
+        buttons_frame.grid(row=3, column=0, sticky="e", padx=pad, pady=(0, pad))
         ttk.Button(buttons_frame, text="OK", command=self._on_ok).grid(row=0, column=0, padx=(0, self._s(4)))
         ttk.Button(buttons_frame, text="Cancel", command=self._on_cancel).grid(row=0, column=1)
 
@@ -375,6 +416,12 @@ class OptionsForm(BaseForm):
         beh["on_close"] = self.on_close_rev.get(self.on_close_var.get(), "minimize_to_tray")
         beh["transparency_active"] = int(self.transparency_active_var.get())
         beh["transparency_faded"] = int(self.transparency_faded_var.get())
+        self.temp_config["josm_control_method"] = resolve_control_method(
+            self.josm_control_method_rev.get(
+                self.josm_control_method_var.get(),
+                self.temp_config.get("josm_control_method"),
+            )
+        )
         self.config.update(self.temp_config)
         save_config(self.config)
         self.destroy()
