@@ -81,15 +81,6 @@
 ### Important: Whatever the Operating system, JOSM must be open and at least one map element selected before using the "Apply" function.
 
 
-### Note
-> JOSM TAgger has two possible ways to send the tags to JOSM:
-> - ***User Interface Automation***: the program emulates user's clicks and keyboard commands in JOSM, e.g. by "pressing" *Ctrl-A* to recall the tag insertion form, *Tab* to switch among the form fields, *Enter* to confirm). 
->
->- ***Remote Control***: tags are sent to JOSM through *http* protocol. In order for this method to work, the *Remote Control* feature must be enabled in JOSM (`Edit >> Preferences >> Remote control >> Enable Remote Control` ): this will cause the Editor to listen for connections on standard TCP port 8111.
-
-Each method has its up and down sides: *GUI automation* doesn't need particular settings but is slower and requires that the user does not interact with the keyboard or mouse while the tags are being applied; on the other side, *Remote control* is faster but requires additional configuration and -in some cases- user permissions to work.
-
-
 ## Tag groups
 In JOSM Tagger, one or more OSM tags can be grouped under a short mnemonic code, which can be quickly recalled by typing its name.
 #### The *Code* text box
@@ -152,7 +143,7 @@ The list in the middle part of the window can be browsed to see which tags group
 | `pser` | `highway=service, access=private` | Add a private driveway |
 | `tuc` | `tunnel=culvert, layer=-1` | Mark a culvert |
 
-**Complete list**: All available codes are stored locally and can be browsed using the **Search** dialog (see below).
+**Complete list**: all available codes are stored locally and can be browsed using the **Search** dialog (see below).
 
 ---
 
@@ -189,6 +180,7 @@ Need to know which groups contain a particular tag? The ***Search*** function co
 	2. ***Edit***: Opens the *Tag Editor*, where it can be modified or deleted.
 
 
+---
 
 
 ## Creating and modifying Tag Groups
@@ -223,136 +215,96 @@ In the main window, select `Edit >> Tag groups`: this will bring the *Tag editor
    - Click the ***[ Add ]*** button to assign a new tag to the selected group
 
 
+
+#### Tags with "generic values"
+Sometimes it can be useful to add a tag with a generic value to an element on the map, to be modified later.
+
+In this case, a value such as `...`, or `###` (or any other string containing the same character repeated 3 times or more) can be assigned to that tag.
+
+> **Example**: Group *nn* will expand into the tags:
+> `addr:street=......`<br>
+> `addr:housenumber=......`
+
+Josm Tagger will detect the "generic" value when applying the tag group, and will display a warning message:
+
+<p align="center">
+  <img src="pub/generic_value_wrn.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+</p>
+
+> **IMPORTANT**: such generic tag values values MUST NOT be uploaded to the OpenStreetMap database! 
+>Please <u>use this function carefully</u> and always take some time to review your edits and the warnings thrown by JOSM at upload time.
+
+
 #### Creating a new group
 
 1. Click the ***[ New ]*** button
 
 2. Enter a name tor the new group (perhaps a short one, which can be easily remembered and typed).  
 
-> **NOTE**: The group name must be unique, otherwise you will get an error!
+> **NOTE**: The group name must be unique, otherwise an error message is displayed.
 
 <p align="center">
   <img src="pub/duplicated_tag_err.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
 </p>
 
-------
--------
-------
+3. Add one or more tags to the new group, as shown above.
 
-
-1. Click the **Tag Groups dropdown** in the main window
-2. Select a group from the list (e.g., "Building basics", "Road properties")
-3. A description or list of tags is shown
-4. Click **"Apply Group"** to send all tags to JOSM
-
-### Creating a New Tag Group
-
-1. Click the **Settings button** (gear icon)
-2. Go to the **"Tag Groups"** tab
-3. Click **"New Group"**
-4. Enter a group name (e.g., "My Building Tags")
-5. Click **"Add Code to Group"** to select which codes to include
-6. Drag codes to reorder them if needed
-7. Click **Save** to confirm
-
-### Editing an Existing Tag Group
-
-1. Open **Settings → Tag Groups**
-2. Select the group from the list
-3. Click **"Edit Group"**
-4. Add or remove codes using the interface
-5. Click **Save** to confirm changes
 
 ### Deleting a Tag Group
 
-1. Open **Settings → Tag Groups**
-2. Select the group you want to delete
-3. Click **"Delete Group"**
-4. Confirm the deletion
+1. Right click the desired name in the *Available groups* list;
+2. Choose ***Delete*** from the context menu.
+
+
+### Renaming a Tag Group
+
+1. Right click the desired name in the *Available groups* list;
+2. Choose ***Rename*** from the context menu.
 
 ---
 
-
-
----
 
 ## Program Settings
 
-Access settings by clicking the **Settings button** (gear icon) in the main window.
+This menu allows some customization to the program's interface and behaviour.
+To open it, from the main window select `Edit >> Preferences`:
 
-### General Tab
+<p align="center">
+  <img src="pub/prefs.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+</p>
 
-#### Font Selection
-- **Font Family**: Choose your preferred font (Arial, Calibri, etc.)
-- **Font Size**: Adjust text size (useful for high-DPI displays)
-- **UI Scale**: Scale the entire interface (useful if text is too small)
+### Appearance
+Here some graphics elements of the program can be configured (background and foreground colour, DArk MOde, etc.)
 
-#### JOSM Window Detection
-- **JOSM Window Title**: The application searches for the JOSM window using this title
-- Default: `Java OpenStreetMap Editor`
-- If JOSM isn't detected, try checking the actual JOSM window title in your system
+### Behaviour
+This section contains options which control the program's reaction to particular events (when losing focus, when applying tags, when closed by clicking the 'x' button in the window corner)
 
-### Theme Tab (Appearance)
 
-#### Light Theme
-- **Background Color**: Choose the main window background color
-- **Panel Color**: Color for panels and buttons
-- **Text Color**: Foreground text color
+### JOSM interface
 
-#### Dark Theme
-- **Background Color**: Main window background in dark mode
-- **Panel Color**: Panel/button color
-- **Text Color**: Text color in dark mode
+JOSM Tagger has two possible ways to send the tags to JOSM:
+- ***User Interface Automation***: the program emulates user's clicks and keyboard commands in JOSM, e.g. by "pressing" *Ctrl-A* to recall the tag insertion form, *Tab* to switch among the form fields, *Enter* to confirm). 
 
-#### Enable Dark Theme
-- Toggle the dark theme on or off
-- Changes apply immediately
+- ***Remote Control***: tags are sent to JOSM through *http* protocol. In order for this method to work, the *Remote Control* feature must be enabled in JOSM (`Edit >> Preferences >> Remote control >> Enable Remote Control` ): this will cause the Editor to listen for connections on standard TCP port 8111.
 
-#### Background Picture
-- **Load Image**: Set a background image for the main window
-- **Remove Image**: Clear the background picture
-- Useful for custom branding or visibility in bright environments
+Each method has its up and down sides: *GUI automation* doesn't need particular settings but is slower and requires that the user does not interact with the keyboard or mouse while the tags are being applied; on the other side, *Remote control* is faster but requires additional configuration and -in some cases- user permissions to work.
 
-### Hotkey Tab
-
-#### Global Hotkey Activation
-- **Hotkey**: Set a keyboard shortcut to show/hide the JOSM Tagger window
-- **Default**: Usually Alt+T or similar (platform-dependent)
-- Useful when JOSM is fullscreen or you need quick access
-
-**Note on Linux**: Global hotkeys work best on X11 sessions. If using Wayland, hotkey support may be limited.
-
-### Tag Groups Tab
-(See [Working with Tag Groups](#working-with-tag-groups) above)
+> **NOTE**: On Linux systems,the only available option is Remote Control.
 
 ---
 
-## Keyboard Shortcuts
+## Application font
+The font style and size can be customized by selecting `View >> Font`. Set the desired options, the click [ Apply ] to confirm your choice.
 
-### Global Shortcuts (Work Anywhere)
+---
 
-| Shortcut | Function | Platform |
-| --- | --- | --- |
-| **Alt+T** | Show/Hide JOSM Tagger window | Windows, Linux |
-| **Ctrl+F** | Open Search dialog | Windows, Linux |
 
-### Main Window Shortcuts
+## Global Hotkey Activation
 
-| Shortcut | Function |
-| --- | --- |
-| **Ctrl+Enter** | Apply the current mnemonic code |
-| **Tab** | Switch between input fields |
-| **Escape** | Clear the mnemonic code field |
-| **Alt+S** | Open Settings |
-| **Alt+H** | Open Help / About |
+Josm Tagger is configured to automatically bring up its main window if the Ctrl-0 hotkey is detected.
 
-### Search Window Shortcuts
+> **NOTE**: on Linux, global hotkeys work best on X11 sessions. If using Wayland, hotkey support may be limited.
 
-| Shortcut | Function |
-| --- | --- |
-| **Enter** | Apply the selected code from search results |
-| **Escape** | Close the search window |
-| **Ctrl+C** | Copy the selected code to clipboard |
 
 ---
 
@@ -416,9 +368,7 @@ sudo apt install -y python3-tk libcanberra-gtk-module libcanberra-gtk3-module
   - `acp` for access=private
   - Avoid very short codes that clash with other codes
   
-### Window Management
-- **Minimize to tray**: Close the main window to minimize it to the system tray (hotkey brings it back)
-- **Stay on top**: The window always stays on top of other applications for quick access
+
 
 ### Backup Your Configuration
 - **config.json**: Contains all your settings, groups, and preferences
@@ -433,19 +383,20 @@ sudo apt install -y python3-tk libcanberra-gtk-module libcanberra-gtk3-module
 ## Frequently Asked Questions
 
 **Q: Can I edit the mnemonic codes?**  
-A: Currently, code definitions come from `codes.json`. Advanced users can edit this file directly (requires restart), but a GUI editor for codes is planned for a future version.
+A: Yes, you can! Just use the Tag Editor, available in the main menu.
 
 **Q: Can I use JOSM Tagger with remote JOSM servers?**  
 A: No, JOSM Tagger interacts with the local JOSM application only. Remote sessions are not supported.
 
 **Q: Can I use multiple tag groups at once?**  
-A: You must apply groups one at a time. However, you can create composite groups that combine multiple groups' tags.
+A: You must apply groups one at a time. However, you can create groups that combine tags from different groups.
 
-**Q: Is there a mobile/web version?**  
-A: Not currently. JOSM Tagger is a desktop application for Windows and Linux.
+**Q: Can I change the global Hotkey?**  
+A: Not at the moment. So far, Ctrl-0 is the only possible key combination to restore the Josm Tagger window after it has minimized to the Tray. 
+
 
 **Q: How do I uninstall JOSM Tagger?**  
-- **Windows**: Settings → Apps → Find "JOSM Tagger" → Uninstall
+- **Windows**: Locate the JOSM Tagger directory and delete it!
 - **Linux**: `sudo apt remove josm-tagger` or use your package manager
 
 ---

@@ -1138,6 +1138,41 @@ class MainForm:
     def clear_input(self, event=None):
         self._reset_input()
 
+    def _show_generic_tags_warning(self):
+        from tkinter import messagebox
+
+        previous_topmost = None
+        try:
+            previous_topmost = bool(self.root.attributes("-topmost"))
+        except Exception:
+            previous_topmost = None
+
+        try:
+            self.root.deiconify()
+        except Exception:
+            pass
+
+        try:
+            self.root.attributes("-topmost", True)
+            self.root.lift()
+            self.root.update_idletasks()
+        except Exception:
+            pass
+
+        try:
+            messagebox.showwarning(
+                "Warning",
+                "Tags with generic values were added. "
+                "Please review the edited element manually before uploading.",
+                parent=self.root,
+            )
+        finally:
+            if previous_topmost is not None:
+                try:
+                    self.root.attributes("-topmost", previous_topmost)
+                except Exception:
+                    pass
+
     def send(self, code):
 
         self._sending_in_progress = True
@@ -1201,12 +1236,7 @@ class MainForm:
                     self._reset_input()
 
                     if generic_found:
-                        from tkinter import messagebox
-                        messagebox.showwarning(
-                            "Warning",
-                            "Tags with generic values were added. "
-                            "Please review the edited element manually before uploading."
-                        )
+                        self._show_generic_tags_warning()
 
                     self._sending_in_progress = False
                     self.allow_minimize = True

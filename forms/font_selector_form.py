@@ -179,6 +179,7 @@ class FontSelectorForm(BaseForm):
         self.preview_label = tk.Label(
             self,
             text="The quick brown fox jumps over the lazy dog",
+            # text="Omnia Gallia divisa est in partes tres -- 0123456789",
             bg=self.panel_color,
             fg=self.panel_fg,
             relief="solid",

@@ -282,7 +282,7 @@ class TagEditorForm(BaseForm):
         paned.pack(fill="both", expand=True, padx=6, pady=6)
 
         left_frame = tk.Frame(paned)
-        tk.Label(left_frame, text="Available codes").pack(anchor="w", padx=4)
+        tk.Label(left_frame, text="Available groups").pack(anchor="w", padx=4)
         list_container = tk.Frame(left_frame)
         list_container.pack(fill="both", expand=True)
         self.code_list = tk.Listbox(list_container)
