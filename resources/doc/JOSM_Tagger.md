@@ -163,37 +163,82 @@ Need to know which groups contain a particular tag? The ***Search*** function co
 
 1. In the main window, select `Edit >> Search`, or just press **Ctrl+F**:
 
-2. Enter a **search term** in the search field (e.g., `highway`)
+2. Type any term in the search field (e.g., `highway`);
 
-3. All codes that include a tag with the key `highway` will be listed
+3. All groups that include a tag with the entered key will be listed;
 
-**Example**: Search for `highway`
-- Results show: `hw` (highway=road), `hwres` (highway=residential), etc.
+4. The results can be refined by limiting the search to codes, key or values in the *Filters* section (select the corresponding checkboxes to enable, deselect to disable)
 
-### Searching by Tag Value
 
-1. Enter a **search term** in the search field (e.g., `private`)
-2. Search results show codes where any tag value contains `private`
-
-**Example**: Search for `private`
-- Results show: `acp` (access=private), `pvt` (private=yes), etc.
-
-### Using Search Results
-
-1. Click on a code in the search results
-2. The code and its tags are displayed
-3. Click **"Apply"** to send the tag to JOSM
-4. Or copy the code to your clipboard for later use
+<p align="center">
+  <img src="pub/search_form.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+</p>
 
 
 
+### Using the search results
+
+1. <u>Click</u> any code in the search results to show its details in the right part of thew window;
+
+2. <u>Double-click</u> to load it into the main widow, redy to be applied;
+
+3. <u>Right-click</u> to display a context menu which offers two options:
+
+	1. ***Use***: loads the code into the main window, for later use;
+
+	2. ***Edit***: Opens the *Tag Editor*, where it can be modified or deleted.
 
 
-## Working with Tag Groups
 
-Tag Groups allow you to apply multiple related tags at once by typing the corresponding mnemonic code.
 
-### Selecting a Tag Group
+## Creating and modifying Tag Groups
+
+The existing groups can be modified or deleted if not needed; You also can create new ones to suit particular needs.
+
+
+### The Tag Editor
+
+In the main window, select `Edit >> Tag groups`: this will bring the *Tag editor* window up.
+
+<p align="center">
+  <img src="pub/tag_editor.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+</p>
+
+#### Editing existing groups
+
+1. Type a mnemonic into the *Code* textbox, and/or select it from the *Available codes* list  
+
+2. Review the tags currently belonging to that group in the *Assigned tags* section; select the one you wish to modify
+
+  - Click the ***[ Edit ]*** button to change the tag key and value:
+
+<p align="center">
+  <img src="pub/kv_editor.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+</p>
+
+   - Click the ***[ Remove ]*** button to delete the tag  
+   
+ > **IMPORTANT** - The tag deletion cannot be undone!    
+ 
+   - Click the ***[ Add ]*** button to assign a new tag to the selected group
+
+
+#### Creating a new group
+
+1. Click the ***[ New ]*** button
+
+2. Enter a name tor the new group (perhaps a short one, which can be easily remembered and typed).  
+
+> **NOTE**: The group name must be unique, otherwise you will get an error!
+
+<p align="center">
+  <img src="pub/duplicated_tag_err.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+</p>
+
+------
+-------
+------
+
 
 1. Click the **Tag Groups dropdown** in the main window
 2. Select a group from the list (e.g., "Building basics", "Road properties")

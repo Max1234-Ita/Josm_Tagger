@@ -487,7 +487,7 @@ class TagEditorForm(BaseForm):
         self.update_tag_list()
 
     def new_code(self):
-        name = simpledialog.askstring("New Code", "Enter code name:", parent=self)
+        name = simpledialog.askstring("New tag group", "Enter group name:", parent=self)
         if name:
             name = name.strip()
             if name in self.working_codes:

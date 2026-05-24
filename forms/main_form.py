@@ -358,7 +358,7 @@ class MainForm:
         ))
         # 2. EDIT
         create_menu_item("Edit", lambda m: (
-            m.add_command("Tags & Codes", self.open_editor),
+            m.add_command("Tag groups", self.open_editor),
             m.add_command("Search", self.open_search, "Ctrl+F"),
             m.add_separator(),
             m.add_command("Preferences", self.open_preferences)
