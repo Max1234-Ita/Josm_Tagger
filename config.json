@@ -18,7 +18,7 @@
     "panel": "#3d434e",
     "panel_fg": "#949494"
   },
-  "geometry_tag_editor": "487x358+234+237",
+  "geometry_tag_editor": "487x358+1275+574",
   "geometry_font_selector": "420x360+873+258",
   "about_form_geometry": "300x340+104+104",
   "geometry": {
@@ -68,7 +68,7 @@
     "gar",
     "ony"
   ],
-  "geometry_search": "761x500+726+52",
-  "geometry_options": "312x532+241+300",
+  "geometry_search": "761x500+1015+289",
+  "geometry_options": "312x597+269+304",
   "josm_control_method": "remote_control"
 }

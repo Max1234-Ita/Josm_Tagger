@@ -63,46 +63,54 @@
 ## Quick Overview
 
 ### How It Works
-1. Use the JOSM Editor to draw or select an object on the map (node, way, relation)
+1. In JOSM Editor, draw or select amap element (node, way, relation);
 
-2. With the object(s) selected, switch to JOSM Tagger, either by double-clicking the icon in the system tray or by using the keyboard shortcut (Ctrl-0)
+2. Switch to JOSM Tagger, either by double-clicking the icon in the system tray or by using the keyboard shortcut (Ctrl-0)
  
-3. The main window of Josm Tagger is shown as a small widget, which always stays on top of the other applications:
+3. Josm Tagger is shown as a small widget, which always stays on top of the other applications:
 
 <p align="center">
   <img src="pub/main_form.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
 </p>
 
-4. The Code textbox is immediately activated: type in a mnemonic code (e.g., `hf` for *highway=footway*, `acp` for *access=private*);
+4. The Code textbox is already active: just type in a mnemonic code (e.g., `hf` for *highway=footway*, `acp` for *access=private*);
 
 5. **Click "Apply"** or press **Enter**; the tag(s) are immediately sent to JOSM and applied to the currently selected object.
 
 
-### Important: Whatever the Operating system, JOSM must be open and at least one map element must be selected before using the "Apply" function.
+### Important: Whatever the Operating system, JOSM must be open and at least one map element selected before using the "Apply" function.
 
 
 ### Note
->The way the tags are sent to JOSM is different in Windows and Linux. 
-> - In *Windows*, tags are sent to JOSM through User Interface Automation: Josm Tagger emulates the user's clicks and commands in JOSM, e.g. by "pressing" *Ctrl-A* to recall the tag insertion form, *Tab* to switch among the form fields, *Enter* to confirm). 
+> JOSM TAgger has two possible ways to send the tags to JOSM:
+> - ***User Interface Automation***: the program emulates user's clicks and keyboard commands in JOSM, e.g. by "pressing" *Ctrl-A* to recall the tag insertion form, *Tab* to switch among the form fields, *Enter* to confirm). 
 >
->- In *Linux*, Josm Tagger communicates with the Editor through the *Remote Control* interface. For this reason, the Remote Control function in JOSM must be enabled in JOSM (Edit >> Preferences >> Remote control >> Enable Remote Control )
+>- ***Remote Control***: tags are sent to JOSM through *http* protocol. In order for this method to work, the *Remote Control* feature must be enabled in JOSM (`Edit >> Preferences >> Remote control >> Enable Remote Control` ): this will cause the Editor to listen for connections on standard TCP port 8111.
 
-Each method has its up and down sides: while GUI automation doesn't need particular settings, it's slower and requires that user not to interact with the keyboard/mouse while the tags are being applied; on the other side, Remote control is faster but requires additional configuration and user permissions to work.
-
-
-## Mnemonic Code Input
-In JOSM Tagger, one or more OSM tags can be assigned to a short mnemonic code, which can be quickly recalled by typing its name.
-
-#### The Code text box
-- Enter a mnemonic code (e.g., `hf` for *highway=footway*, `acp` for *access=private*)
-- Click the ***"Apply"*** button or press *Enter* to send the tag to the currently selected object in JOSM
+Each method has its up and down sides: *GUI automation* doesn't need particular settings but is slower and requires that the user does not interact with the keyboard or mouse while the tags are being applied; on the other side, *Remote control* is faster but requires additional configuration and -in some cases- user permissions to work.
 
 
-**Example 1**: Type ***`hf`*** and click *Apply* (or press Enter)
+## Tag groups
+In JOSM Tagger, one or more OSM tags can be grouped under a short mnemonic code, which can be quickly recalled by typing its name.
+#### The *Code* text box
+This control is used to select which group of tags will be applied to the selected object(s) in JOSM.
+
+ 1) Select the textbox and type any mnemonic code among the ones available (listed in the middle part of the main window), e.g., *`hf`* for *highway=footway*, or *`acp`* for *access=private*.
+
+As you type the first characters, the code list will show the ones that begin with the entered characters; 
+
+<p align="center">
+  <img src="pub/main_form_tagpreview.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+</p>
+
+ 2. Click the ***"Apply"*** button or press *Enter* to apply the tag(s) to the currently selected object in JOSM
+
+
+> **Example 1**: Type ***`hf`*** and click *Apply* (or press Enter)
 > the tag is applied to the currently selected object in JOSM:
 > `highway=footway`
 
-**Example 2**: Type ***`pser`*** and click *Apply* 
+> **Example 2**: Type ***`pser`*** and click *Apply* 
 > The tags are sent to JOSM:<br>
 > `highway=service`<br>
 > `access=private`
@@ -111,20 +119,17 @@ In JOSM Tagger, one or more OSM tags can be assigned to a short mnemonic code, w
 
 ---
 
-#### Available codes
-1) - As you type the first characters, the list of available codes, in the middle part of the main window, will show the ones that begin with the entered characters; 
-
-<p align="center">
-  <img src="pub/main_form_tagpreview.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
-</p>
+#### Available tag groups
+The list in the middle part of the window can be browsed to see which tags groups are presente and the tags assigned to them.
 
 - Hover the mouse cursor above one of them to get a preview of the associated tags; 
 
 - Click any code in the list to display the tags in the *Tag preview* section.
 
+- Right-click a code in the list to show a context menu. Two options are available from there:
+
 - Double-click a code in the list to immediately send it to JOSM.
 
-- Right-click a code in the list to show a context menu. Two options are available from there:
 
 > 1. ***Use*** --> Send the code to the main textbox;
 > 2. ***Edit*** -> Send the code to the Tag Editor form, where you can modify it.
@@ -134,7 +139,7 @@ In JOSM Tagger, one or more OSM tags can be assigned to a short mnemonic code, w
 </p>
 
 
-### Common Mnemonic Codes (Examples)
+### Common Codes (Examples)
 
 | Code | Expands To | Use Case |
 | --- | --- | --- |
@@ -150,6 +155,39 @@ In JOSM Tagger, one or more OSM tags can be assigned to a short mnemonic code, w
 **Complete list**: All available codes are stored locally and can be browsed using the **Search** dialog (see below).
 
 ---
+
+## Searching for Tags
+
+Need to know which groups contain a particular tag? The ***Search*** function comes to help!
+
+
+1. In the main window, select `Edit >> Search`, or just press **Ctrl+F**:
+
+2. Enter a **search term** in the search field (e.g., `highway`)
+
+3. All codes that include a tag with the key `highway` will be listed
+
+**Example**: Search for `highway`
+- Results show: `hw` (highway=road), `hwres` (highway=residential), etc.
+
+### Searching by Tag Value
+
+1. Enter a **search term** in the search field (e.g., `private`)
+2. Search results show codes where any tag value contains `private`
+
+**Example**: Search for `private`
+- Results show: `acp` (access=private), `pvt` (private=yes), etc.
+
+### Using Search Results
+
+1. Click on a code in the search results
+2. The code and its tags are displayed
+3. Click **"Apply"** to send the tag to JOSM
+4. Or copy the code to your clipboard for later use
+
+
+
+
 
 ## Working with Tag Groups
 
@@ -189,37 +227,7 @@ Tag Groups allow you to apply multiple related tags at once by typing the corres
 
 ---
 
-## Searching for Tags
 
-The Search function helps you find mnemonic codes that contain specific tag keys or values.
-
-### Opening the Search Dialog
-
-1. Click the **Search button** in the main window
-2. Or press **Ctrl+F** (if configured in settings)
-
-### Searching by Tag Key
-
-1. Enter a **search term** in the search field (e.g., `highway`)
-2. All codes that include a tag with the key `highway` will be listed
-
-**Example**: Search for `highway`
-- Results show: `hw` (highway=road), `hwres` (highway=residential), etc.
-
-### Searching by Tag Value
-
-1. Enter a **search term** in the search field (e.g., `private`)
-2. Search results show codes where any tag value contains `private`
-
-**Example**: Search for `private`
-- Results show: `acp` (access=private), `pvt` (private=yes), etc.
-
-### Using Search Results
-
-1. Click on a code in the search results
-2. The code and its tags are displayed
-3. Click **"Apply"** to send the tag to JOSM
-4. Or copy the code to your clipboard for later use
 
 ---
 
