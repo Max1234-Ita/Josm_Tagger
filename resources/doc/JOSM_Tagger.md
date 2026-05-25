@@ -1,19 +1,29 @@
-# JOSM Tagger - User Guide
+| <img src="../josm_tagger_120.png" width=120> |<h1 style="margin:8;">JOSM Tagger - User Guide</h1>|
+|----------------------|----------------------------|
 
-**JOSM Tagger** is a small application designed to speed up OSM (OpenStreetMap) mapping with the JOSM editor. It provides quick tag assignment using mnemonic codes, tag group management, and search capabilities.
+**JOSM Tagger** is a small application designed to speed up OpenStreetMap (OSM) mapping with the JOSM editor. 
+
+It provides quick tag assignment using mnemonic codes, tag group management, and search capabilities.
 
 ---
 
 ## Table of Contents
 
 1. [Getting Started](#getting-started)
-2. [Launching the Application](#launching-the-application)
-3. [Main Window Overview](#main-window-overview)
-4. [Using Mnemonic Codes](#using-mnemonic-codes)
-5. [Working with Tag Groups](#working-with-tag-groups)
+   - [System Requirements](#system-requirements)
+2. [Installation](#installation)
+3. [Launching the Application](#launching-the-application)
+4. [Quick Overview](#quick-overview)
+5. [Tag Groups](#tag-groups)
 6. [Searching for Tags](#searching-for-tags)
-7. [Program Settings](#program-settings)
-8. [Keyboard Shortcuts](#keyboard-shortcuts)
+7. [Creating and Modifying Tag Groups](#creating-and-modifying-tag-groups)
+8. [Program Settings](#program-settings)
+9. [Application Font](#application-font)
+10. [Global Hotkey Activation](#global-hotkey-activation)
+11. [Troubleshooting](#troubleshooting)
+12. [Frequently Asked Questions](#frequently-asked-questions)
+13. [Getting Help](#getting-help)
+14. [Version Information](#version-information)
 
 ---
 
@@ -341,6 +351,7 @@ Josm Tagger is configured to automatically bring up its main window if the Ctrl-
 3. Check that the JOSM window hasn't been renamed or minimized to tray
 4. Restart JOSM and JOSM Tagger
 
+
 ### Application Crashes on Linux
 **Problem**: Application exits unexpectedly
 
@@ -353,29 +364,16 @@ sudo apt update
 sudo apt install -y python3-tk libcanberra-gtk-module libcanberra-gtk3-module
 ```
 
----
-
-## Tips & Best Practices
-
-### Productivity Tips
-- **Use tag groups for complex objects**: For buildings, create a group with common keys (building=*, height, levels, material)
-- **Create custom groups per mapping session**: Organize codes by the type of objects you're mapping that session
-- **Combine with JOSM presets**: Use JOSM presets for complex tagging, JOSM Tagger for quick single tags
-
-### Organizing Your Codes
-- **Naming convention**: Use codes that are easy to remember:
-  - `hw` for highway tags
-  - `acp` for access=private
-  - Avoid very short codes that clash with other codes
-  
-
 
 ### Backup Your Configuration
 - **config.json**: Contains all your settings, groups, and preferences
+
 - **codes.json**: Contains all your mnemonic code definitions
-- **Location**:
-  - Windows: `%AppData%\Local\JOSM_Tagger\`
-  - Linux: `~/.config/josm_tagger/` (or check the app directory)
+
+- **File location**:
+  - **Windows**: `%AppData%\Local\JOSM_Tagger\`
+  - **Linux**: `~/.config/josm_tagger/` (or check the app directory)
+
 - Periodically backup these files to safely move your setup to another machine
 
 ---
@@ -404,12 +402,16 @@ A: Not at the moment. So far, Ctrl-0 is the only possible key combination to res
 ## Getting Help
 
 - **Report Bugs**: Visit the project repository and open an issue
+
 - **Suggestions**: Feature requests are welcome in the issue tracker
-- **Configuration Help**: Check `config.json` documentation in the project README
+
+
 
 ---
 
 ## Version Information
+
+
 
 - **Current Version**: 0.1.11
 - **Author**: Max1234-ITA, 2026

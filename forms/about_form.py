@@ -3,7 +3,7 @@ from config_manager import save_config
 import os
 import sys
 
-from main import appinfo
+from app_metadata import APP_INFO
 from effects import apply_background_picture, apply_theme_colors, get_active_theme
 from forms.base_form import BaseForm
 
@@ -80,7 +80,7 @@ class AboutForm(BaseForm):
         
         info_label = tk.Label(
             main_frame,
-            text=appinfo,
+            text=APP_INFO,
             justify="center",
             wraplength=AboutForm.MAX_SIZE - 40,
             bg=self.bg_color,

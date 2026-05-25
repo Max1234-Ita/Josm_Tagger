@@ -23,8 +23,8 @@
   "about_form_geometry": "300x340+104+104",
   "geometry": {
     "main_form": {
-      "x": 772,
-      "y": 420,
+      "x": 81,
+      "y": 102,
       "w": 342,
       "h": 320
     },
@@ -71,5 +71,9 @@
   "geometry_search": "761x500+125+67",
   "geometry_options": "312x597+269+304",
   "josm_control_method": "gui_automation",
-  "geometry_tag_properties": "352x114+483+519"
+  "geometry_tag_properties": "352x114+483+519",
+  "updates": {
+    "auto_check": true,
+    "last_check_utc": "2026-05-25T20:37:49.531138+00:00"
+  }
 }
