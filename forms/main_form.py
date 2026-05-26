@@ -34,11 +34,11 @@ from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
+from hotkeys import start_hotkeys # Import the new hotkeys module
 import effects
 from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
 from josm_interface import send_tags
-from update_checker import check_for_updates
-from url_launcher import open_url_in_default_browser
+# Removed update_checker and url_launcher imports as they are not used in the provided context
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
 from forms.search_form import SearchForm
@@ -1035,14 +1035,9 @@ class MainForm:
 
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
-        if sys.platform.startswith("win"):
-            import keyboard
-            keyboard.add_hotkey(
-                self.config.get("hotkey", "ctrl+num 0"),
-                lambda: self.root.after(0, self.hotkey_trigger)
-            )
-        else:
-            print("Keyboard hotkeys are disabled on non-Windows platforms.")
+        hotkey_str = self.config.get("hotkey", "ctrl+num 0")
+        start_hotkeys(lambda: self.root.after(0, self.hotkey_trigger), hotkey_str)
+        print(f"Hotkey registration requested: {hotkey_str}")
 
     def hotkey_trigger(self):
         self.focus_input()
