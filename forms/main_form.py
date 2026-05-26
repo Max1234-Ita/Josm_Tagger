@@ -8,7 +8,6 @@ import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import messagebox
 
-import keyboard
 # ---------------------------------------------------------------------------
 # NOTE ON PYSTRAY (IMPORTANT)
 #
@@ -786,12 +785,11 @@ class MainForm:
         except:
             pass
 
-        # Adjust window height to upper + preview
+        # Adjust window height to match saved layout
         w = self.root.winfo_width()
         total_h = self.upper_height + self.preview_height
         self.root.geometry(f"{w}x{total_h}")
 
-        # Update preview_height from actual widget height
         self.root.update_idletasks()
         try:
             self.preview_height = max(160, self.preview_frame.winfo_height())
@@ -1037,10 +1035,14 @@ class MainForm:
 
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
-        keyboard.add_hotkey(
-            self.config.get("hotkey", "ctrl+num 0"),
-            lambda: self.root.after(0, self.hotkey_trigger)
-        )
+        if sys.platform.startswith("win"):
+            import keyboard
+            keyboard.add_hotkey(
+                self.config.get("hotkey", "ctrl+num 0"),
+                lambda: self.root.after(0, self.hotkey_trigger)
+            )
+        else:
+            print("Keyboard hotkeys are disabled on non-Windows platforms.")
 
     def hotkey_trigger(self):
         self.focus_input()
@@ -1217,8 +1219,15 @@ class MainForm:
         self._render_preview(code)
 
         def worker():
-            import pyautogui
-            pyautogui.FAILSAFE = False
+            # Conditional import of pyautogui for Windows only
+            if sys.platform.startswith("win"):
+                import pyautogui
+                pyautogui.FAILSAFE = False
+                control_method = self.config.get("josm_control_method")
+            else:
+                # On Linux, force "Remote Control" and skip pyautogui
+                control_method = "remote_control"
+                print("Running on Linux, forcing JOSM control method to 'Remote Control'.")
 
             print('Send Worker started')
 
@@ -1262,7 +1271,7 @@ class MainForm:
                 send_tags(
                     tags_list,
                     main_root=self.root,
-                    control_method=self.config.get("josm_control_method"),
+                    control_method=control_method, # Use the determined control_method
                 )
 
             finally:

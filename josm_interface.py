@@ -5,9 +5,20 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-import pyautogui
-import pygetwindow as gw
-import pyperclip
+# Conditional import for Windows-specific libraries
+if platform.system() == "Windows":
+    try:
+        import pyautogui
+        import pygetwindow as gw
+        import pyperclip
+    except ImportError:
+        pyautogui = None
+        gw = None
+        pyperclip = None
+else:
+    pyautogui = None
+    gw = None
+    pyperclip = None
 
 
 JOSM_REMOTE_BASE_URL = "http://127.0.0.1:8111"
@@ -68,12 +79,19 @@ def _confirm_remote_control_dialog():
     if not JOSM_REMOTE_AUTO_CONFIRM:
         return
 
+    if is_linux():
+        print("Skipping auto-confirm on Linux.")
+        return
+
     print("Trying to confirm JOSM Remote Control dialog")
     time.sleep(JOSM_REMOTE_CONFIRM_DELAY)
     try:
-        pyautogui.FAILSAFE = False
-        pyautogui.press("enter")
-        print("Sent Enter to confirm JOSM Remote Control dialog")
+        if pyautogui:
+            pyautogui.FAILSAFE = False
+            pyautogui.press("enter")
+            print("Sent Enter to confirm JOSM Remote Control dialog")
+        else:
+            print("pyautogui not available, skipping auto-confirm.")
     except Exception as e:
         print(f"Could not auto-confirm JOSM Remote Control dialog: {e}")
 
@@ -111,6 +129,10 @@ def send_tags_remote_control(pairs):
 
 
 def send_tags_gui_automation(pairs, main_root=None):
+    if not pyautogui or not gw or not pyperclip:
+        print("GUI automation libraries not available on this OS.")
+        return False
+
     if not focus_josm(main_root=main_root):
         return False
 
@@ -143,6 +165,9 @@ def send_tags_gui_automation(pairs, main_root=None):
 
 
 def focus_josm(main_root=None):
+    if not gw:
+        print("pygetwindow not available, cannot focus JOSM.")
+        return False
 
     windows = gw.getWindowsWithTitle("Java OpenStreetMap Editor")
 
