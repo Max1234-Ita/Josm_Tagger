@@ -3,6 +3,8 @@ import sys
 import json
 import time
 import threading
+import queue
+import re
 from datetime import datetime, timedelta, timezone
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -34,11 +36,12 @@ from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
-from hotkeys import start_hotkeys # Import the new hotkeys module
+from hotkeys import start_hotkeys, linux_global_hotkeys_available
 import effects
 from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
 from josm_interface import send_tags
-# Removed update_checker and url_launcher imports as they are not used in the provided context
+from update_checker import check_for_updates # Re-added import
+from url_launcher import open_url_in_default_browser # Re-added import
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
 from forms.search_form import SearchForm
@@ -150,6 +153,7 @@ class MainForm:
         # Track send() state
         self._sending_in_progress = False
         self._update_check_in_progress = False
+        self._hotkey_events = queue.Queue()
 
         # Keyboard shortcuts
         self.root.bind("<Control-f>", self.open_search)
@@ -211,6 +215,7 @@ class MainForm:
         self.build_ui()
         self._init_command_history()
         self.register_hotkey()
+        self.root.after(100, self._process_hotkey_events)
         self.apply_font()
         self.apply_theme()
         self.update_list()
@@ -1035,9 +1040,43 @@ class MainForm:
 
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
-        hotkey_str = self.config.get("hotkey", "ctrl+num 0")
-        start_hotkeys(lambda: self.root.after(0, self.hotkey_trigger), hotkey_str)
+        hotkey_str = self.config.get("hotkey", "alt+0")
+
+        if sys.platform.startswith("linux"):
+            if linux_global_hotkeys_available():
+                start_hotkeys(self._queue_hotkey_trigger, hotkey_str)
+                print(f"Hotkey registration requested (Linux global): {hotkey_str}")
+                return
+
+            self._linux_hotkey_spec = hotkey_str
+            print(f"Hotkey registration requested (Linux local): {hotkey_str}")
+            return
+
+        start_hotkeys(self._queue_hotkey_trigger, hotkey_str)
         print(f"Hotkey registration requested: {hotkey_str}")
+
+    def _queue_hotkey_trigger(self):
+        try:
+            self._hotkey_events.put_nowait(True)
+        except Exception:
+            pass
+
+    def _process_hotkey_events(self):
+        if self._is_exiting:
+            return
+
+        triggered = False
+        while True:
+            try:
+                self._hotkey_events.get_nowait()
+                triggered = True
+            except queue.Empty:
+                break
+
+        if triggered:
+            self.hotkey_trigger()
+
+        self.root.after(100, self._process_hotkey_events)
 
     def hotkey_trigger(self):
         self.focus_input()
@@ -1365,7 +1404,7 @@ class MainForm:
         try:
             self.history_menu.tk_popup(event.x_root, event.y_root)
         finally:
-            self.history_menu.grab_release()
+            self.context_menu.grab_release()
 
     def show_history_menu_keyboard(self, _event=None):
         self.entry.update_idletasks()
@@ -1398,6 +1437,10 @@ class MainForm:
         return self.show_history_menu_keyboard(event)
 
     def _on_global_keypress(self, event=None):
+        if sys.platform.startswith("linux") and self._linux_hotkey_matches(event):
+            self._queue_hotkey_trigger()
+            return "break"
+
         if not self._focus_is_on_code_combobox():
             return None
         keysym = str(getattr(event, "keysym", "") or "")
@@ -1411,6 +1454,42 @@ class MainForm:
         ):
             return self.show_history_menu_keyboard(event)
         return None
+
+    def _linux_hotkey_matches(self, event=None):
+        spec = getattr(self, "_linux_hotkey_spec", "alt+0")
+        parts = [part.strip().lower() for part in re.split(r"\s*[+-]\s*", spec) if part.strip()]
+        if not parts or event is None:
+            return False
+
+        keysym = str(getattr(event, "keysym", "") or "").lower()
+        keycode = int(getattr(event, "keycode", -1))
+        state = int(getattr(event, "state", 0))
+
+        alt_mask = 0x0008
+        shift_mask = 0x0001
+        ctrl_mask = 0x0004
+
+        wants_alt = any(p in ("alt", "menu", "mod1") for p in parts)
+        wants_ctrl = any(p in ("ctrl", "control") for p in parts)
+        wants_shift = any(p == "shift" for p in parts)
+
+        if wants_alt and not (state & alt_mask):
+            return False
+        if wants_ctrl and not (state & ctrl_mask):
+            return False
+        if wants_shift and not (state & shift_mask):
+            return False
+
+        key_tokens = [p for p in parts if p not in ("alt", "menu", "mod1", "ctrl", "control", "shift")]
+        if not key_tokens:
+            return False
+
+        key = key_tokens[-1]
+        zero_keys = {"0", "num 0", "num0", "num_0", "numpad 0", "numpad0", "numpad_0"}
+        if key in zero_keys:
+            return keysym in {"0", "kp_0", "insert"} or keycode in (19, 10, 90)
+
+        return keysym == key.replace(" ", "_")
 
     def _select_history_code(self, code):
         self.code_var.set(code)
