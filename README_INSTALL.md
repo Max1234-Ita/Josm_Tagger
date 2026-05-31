@@ -39,7 +39,7 @@ Su Debian/Ubuntu installa anche:
 
 ```bash
 sudo apt update
-sudo apt install -y python3-tk libcanberra-gtk-module libcanberra-gtk3-module
+sudo apt install -y python3-tk libcanberra-gtk-module libcanberra-gtk3-module xserver-xephyr
 ```
 
 ## 5) Configurazione consigliata di `pystray`
@@ -68,7 +68,13 @@ python main.py
 
 ## 8) Problemi comuni
 
-- **Hotkey non funziona su Linux**: prova a eseguire in sessione X11 (su Wayland alcuni hook globali sono limitati).
+- **Hotkey non funziona su Linux**: se sei su Wayland e vuoi mantenere il desktop attuale, avvia JOSM Tagger in un server X annidato con Xephyr:
+  ```bash
+  JOSM_TAGGER_USE_XEPHYR=1 ./josmtagger.sh
+  ```
+  In questo modo l'app gira in un ambiente X11 compatibile e la hotkey globale continua a funzionare.
+- Se invece vuoi una sessione X11 vera, esci e al login scegli una sessione X11/Xorg.
+- Verifica con `echo $XDG_SESSION_TYPE`: in una sessione X11 vera deve stampare `x11`.
 - **Finestra JOSM non trovata**: verifica che JOSM sia aperto e che il titolo finestra corrisponda.
 - **Errore Tkinter su Linux**: verifica installazione di `python3-tk`.
 

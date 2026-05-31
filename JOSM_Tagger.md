@@ -42,6 +42,19 @@
 3. Launch **JOSM Tagger** from your applications menu
 4. **Important**: JOSM must be open before you use the "Apply" function
 
+If you are on Wayland and need the global hotkey to restore the window after it
+has lost focus or has been minimized to the tray, run JOSM Tagger inside a
+nested X11 server:
+
+```bash
+sudo apt install xserver-xephyr
+JOSM_TAGGER_USE_XEPHYR=1
+./josmtagger.sh
+```
+
+This keeps the desktop on Wayland while giving JOSM Tagger an X11-compatible
+display for its hotkey backend.
+
 ---
 
 ## Launching the Application
@@ -228,6 +241,7 @@ Access settings by clicking the **Settings button** (gear icon) in the main wind
 - Useful when JOSM is fullscreen or you need quick access
 
 **Note on Linux**: Global hotkeys work best on X11 sessions. If using Wayland, hotkey support may be limited.
+If you are on Wayland, log out and choose an X11/Xorg session before launching JOSM Tagger.
 
 ### Tag Groups Tab
 (See [Working with Tag Groups](#working-with-tag-groups) above)
@@ -283,7 +297,8 @@ Access settings by clicking the **Settings button** (gear icon) in the main wind
 - Permissions issue
 
 **Solutions**:
-- On Linux, ensure you're using an X11 session (check `echo $XDG_SESSION_TYPE`)
+- On Linux, ensure you're using an X11 session (`echo $XDG_SESSION_TYPE` must print `x11`)
+- If you are on Wayland, log out and choose an X11/Xorg session at the login screen
 - Change the hotkey to something less common
 - Try running JOSM Tagger with elevated permissions (sudo)
 
@@ -375,4 +390,3 @@ A: Not currently. JOSM Tagger is a desktop application for Windows and Linux.
 
 **Last Updated**: May 2026  
 **For the latest version and updates, visit the project repository.**
-

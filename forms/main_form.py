@@ -4,7 +4,6 @@ import json
 import time
 import threading
 import queue
-import re
 from datetime import datetime, timedelta, timezone
 import tkinter as tk
 import tkinter.ttk as ttk
@@ -36,7 +35,21 @@ from PIL import Image
 
 from config_manager import load_config, save_config
 from codes_manager import load_codes
-from hotkeys import start_hotkeys, linux_global_hotkeys_available
+from hotkeys import start_hotkeys
+if sys.platform.startswith("linux"):
+    from linux_hotkeys import (
+        start_hotkeys as start_linux_hotkeys,
+        linux_global_hotkeys_status,
+        linux_hotkey_matches,
+    )
+else:
+    start_linux_hotkeys = None
+
+    def linux_global_hotkeys_status():
+        return "n/a"
+
+    def linux_hotkey_matches(event=None, spec="alt+0"):
+        return False
 import effects
 from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
 from josm_interface import send_tags
@@ -154,6 +167,7 @@ class MainForm:
         self._sending_in_progress = False
         self._update_check_in_progress = False
         self._hotkey_events = queue.Queue()
+        print(f"Linux pynput status: {linux_global_hotkeys_status()}")
 
         # Keyboard shortcuts
         self.root.bind("<Control-f>", self.open_search)
@@ -1041,15 +1055,11 @@ class MainForm:
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
         hotkey_str = self.config.get("hotkey", "alt+0")
+        self._linux_hotkey_spec = hotkey_str
 
         if sys.platform.startswith("linux"):
-            if linux_global_hotkeys_available():
-                start_hotkeys(self._queue_hotkey_trigger, hotkey_str)
-                print(f"Hotkey registration requested (Linux global): {hotkey_str}")
-                return
-
-            self._linux_hotkey_spec = hotkey_str
-            print(f"Hotkey registration requested (Linux local): {hotkey_str}")
+            start_linux_hotkeys(self._queue_hotkey_trigger, hotkey_str)
+            print(f"Hotkey registration requested (Linux): {hotkey_str}")
             return
 
         start_hotkeys(self._queue_hotkey_trigger, hotkey_str)
@@ -1079,20 +1089,24 @@ class MainForm:
         self.root.after(100, self._process_hotkey_events)
 
     def hotkey_trigger(self):
-        self.focus_input()
+        self.restore_main_form()
 
-    def focus_input(self):
-        if self.tray_running:
-            # if it's in tray, restore it
+    def restore_main_form(self):
+        if self.tray_running or str(self.root.state()) in ("withdrawn", "iconic"):
             self._on_tray_restore()
             return
 
         self.root.deiconify()
+        self.root.update_idletasks()
         self.root.lift()
         self.root.attributes("-topmost", True)
+        self.root.after(25, lambda: self.root.attributes("-topmost", False))
         self.root.after(10, self._force_focus)
-        self.root.after(50, self._force_focus)
+        self.root.after(60, self._force_focus)
         self.flash_window()
+
+    def focus_input(self):
+        self.restore_main_form()
 
     def _force_focus(self):
         try:
@@ -1437,7 +1451,7 @@ class MainForm:
         return self.show_history_menu_keyboard(event)
 
     def _on_global_keypress(self, event=None):
-        if sys.platform.startswith("linux") and self._linux_hotkey_matches(event):
+        if sys.platform.startswith("linux") and linux_hotkey_matches(event, getattr(self, "_linux_hotkey_spec", "alt+0")):
             self._queue_hotkey_trigger()
             return "break"
 
@@ -1454,42 +1468,6 @@ class MainForm:
         ):
             return self.show_history_menu_keyboard(event)
         return None
-
-    def _linux_hotkey_matches(self, event=None):
-        spec = getattr(self, "_linux_hotkey_spec", "alt+0")
-        parts = [part.strip().lower() for part in re.split(r"\s*[+-]\s*", spec) if part.strip()]
-        if not parts or event is None:
-            return False
-
-        keysym = str(getattr(event, "keysym", "") or "").lower()
-        keycode = int(getattr(event, "keycode", -1))
-        state = int(getattr(event, "state", 0))
-
-        alt_mask = 0x0008
-        shift_mask = 0x0001
-        ctrl_mask = 0x0004
-
-        wants_alt = any(p in ("alt", "menu", "mod1") for p in parts)
-        wants_ctrl = any(p in ("ctrl", "control") for p in parts)
-        wants_shift = any(p == "shift" for p in parts)
-
-        if wants_alt and not (state & alt_mask):
-            return False
-        if wants_ctrl and not (state & ctrl_mask):
-            return False
-        if wants_shift and not (state & shift_mask):
-            return False
-
-        key_tokens = [p for p in parts if p not in ("alt", "menu", "mod1", "ctrl", "control", "shift")]
-        if not key_tokens:
-            return False
-
-        key = key_tokens[-1]
-        zero_keys = {"0", "num 0", "num0", "num_0", "numpad 0", "numpad0", "numpad_0"}
-        if key in zero_keys:
-            return keysym in {"0", "kp_0", "insert"} or keycode in (19, 10, 90)
-
-        return keysym == key.replace(" ", "_")
 
     def _select_history_code(self, code):
         self.code_var.set(code)
@@ -1779,14 +1757,15 @@ class MainForm:
         self._block_focus_out = True
 
         self.root.deiconify()
+        self.root.update_idletasks()
         self.root.lift()
         self.root.attributes("-topmost", True)
         self.root.after(50, lambda: self.root.attributes("-topmost", False))
 
         # Immediate focus: the user must be able to type even during fade-in.
-        self._force_focus_on_entry()
-        self.root.after(30, self._force_focus_on_entry)
-        self.root.after(120, self._force_focus_on_entry)
+        self.root.after(10, self._force_focus)
+        self.root.after(30, self._force_focus)
+        self.root.after(120, self._force_focus)
 
         # Non-blocking fade-in
         try:
@@ -1814,11 +1793,7 @@ class MainForm:
 
     def _force_focus_on_entry(self):
         """Force focus on the textbox after restore."""
-        try:
-            self.entry.focus_force()
-            self.entry.icursor("end")
-        except:
-            pass
+        self._force_focus()
 
     def _on_focus_in(self, event=None):
         """Fade-in only when necessary, with debounce."""

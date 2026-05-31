@@ -1,4 +1,3 @@
-
 # Build a .deb package for Linux Ubuntu/Mint to install Josm Tagger as a regular app
 
 
@@ -27,12 +26,27 @@ def run(cmd, cwd=PROJECT_ROOT):
 
 
 def read_version():
-    main_py = PROJECT_ROOT / "main.py"
-    text = main_py.read_text(encoding="utf-8")
-    match = re.search(r"^appversion\s*=\s*['\"]([^'\"]+)['\"]", text, re.MULTILINE)
+    # Modificato per leggere APP_VERSION da app_metadata.py
+    app_metadata_py = PROJECT_ROOT / "app_metadata.py"
+    text = app_metadata_py.read_text(encoding="utf-8")
+    match = re.search(r"^APP_VERSION\s*=\s*['\"]([^'\"]+)['\"]", text, re.MULTILINE)
     if not match:
-        raise RuntimeError("Cannot find appversion in main.py")
+        raise RuntimeError("Cannot find APP_VERSION in app_metadata.py")
     return match.group(1)
+
+
+def normalize_debian_version(version):
+    """
+    Debian package versions cannot contain spaces.
+
+    Keep the original human-readable version in app_metadata.py, but convert it
+    here into a Debian-safe form for the control file and output filename.
+    """
+    normalized = version.strip()
+    normalized = re.sub(r"\s+", "-", normalized)
+    normalized = re.sub(r"[^0-9A-Za-z.+:~\-]", "-", normalized)
+    normalized = re.sub(r"-{2,}", "-", normalized)
+    return normalized.strip("-") or "0.0.0"
 
 
 def detect_arch():
@@ -82,6 +96,10 @@ def clean():
 
 
 def build_pyinstaller():
+    env = os.environ.copy()
+    env.setdefault("PYNPUT_BACKEND", "dummy")
+    env.setdefault("PYSTRAY_BACKEND", "gtk")
+
     cmd = [
         *pyinstaller_cmd(),
         "--clean",
@@ -96,9 +114,12 @@ def build_pyinstaller():
         pyinstaller_add_data("codes.json", "."),
         "--add-data",
         pyinstaller_add_data("config.json", "."),
+        "--add-data",
+        pyinstaller_add_data("app_metadata.py", "."), # Aggiunto per includere app_metadata.py
         "main.py",
     ]
-    run(cmd)
+    print("Building with PYNPUT_BACKEND=dummy and PYSTRAY_BACKEND=gtk during analysis.")
+    subprocess.run(cmd, cwd=PROJECT_ROOT, check=True, env=env)
 
 
 def write_file(path, content, mode=None):
@@ -125,7 +146,11 @@ def normalize_package_permissions(package_root):
 def package_deb(version, arch):
     require_tool("dpkg-deb")
 
-    package_root = BUILD_ROOT / f"{PACKAGE_NAME}_{version}_{arch}"
+    debian_version = normalize_debian_version(version)
+    if debian_version != version:
+        print(f"Normalized Debian version: {version!r} -> {debian_version!r}")
+
+    package_root = BUILD_ROOT / f"{PACKAGE_NAME}_{debian_version}_{arch}"
     debian_dir = package_root / "DEBIAN"
     app_dir = package_root / "usr" / "lib" / PACKAGE_NAME
     share_dir = package_root / "usr" / "share" / PACKAGE_NAME
@@ -181,7 +206,7 @@ StartupNotify=true
     )
 
     control = f"""Package: {PACKAGE_NAME}
-Version: {version}
+Version: {debian_version}
 Section: utils
 Priority: optional
 Architecture: {arch}
@@ -205,7 +230,7 @@ License: GPL-3.0-only
 
     normalize_package_permissions(package_root)
 
-    deb_path = DIST_ROOT / f"{PACKAGE_NAME}_{version}_{arch}.deb"
+    deb_path = DIST_ROOT / f"{PACKAGE_NAME}_{debian_version}_{arch}.deb"
     run(["dpkg-deb", "--build", "--root-owner-group", str(package_root), str(deb_path)])
     print(f"Linux package created: {deb_path}")
 
