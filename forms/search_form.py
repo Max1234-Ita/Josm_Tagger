@@ -3,6 +3,7 @@ from tkinter import ttk
 from typing import Dict, List, Any, Optional, Tuple
 import os
 import sys
+from pathlib import Path
 from effects import get_active_theme, apply_theme_colors, apply_background_picture
 from forms.base_form import BaseForm
 
@@ -121,7 +122,10 @@ class SearchForm(BaseForm):
         """Applica l'icona alla finestra (ICO per Windows, PNG per Linux)."""
         try:
             # Risoluzione percorso base (compatibile con PyInstaller)
-            base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+            if hasattr(sys, "_MEIPASS"):
+                base_path = Path(sys._MEIPASS)
+            else:
+                base_path = Path(__file__).resolve().parent.parent
             
             if sys.platform.startswith("win"):
                 icon_path = os.path.join(base_path, "resources", "josm_tagger.ico")

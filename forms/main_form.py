@@ -5,6 +5,7 @@ import time
 import threading
 import queue
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import messagebox
@@ -61,7 +62,10 @@ from forms.search_form import SearchForm
 
 
 def resource_path(relative_path):
-    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    if hasattr(sys, "_MEIPASS"):
+        base_path = Path(sys._MEIPASS)
+    else:
+        base_path = Path(__file__).resolve().parent.parent
     return os.path.join(base_path, relative_path)
 
 

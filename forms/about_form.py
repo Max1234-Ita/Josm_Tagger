@@ -2,6 +2,7 @@ import tkinter as tk
 from config_manager import save_config
 import os
 import sys
+from pathlib import Path
 
 from app_metadata import APP_INFO
 from effects import apply_background_picture, apply_theme_colors, get_active_theme
@@ -9,11 +10,10 @@ from forms.base_form import BaseForm
 
 
 def resource_path(relative_path):
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-
+    if hasattr(sys, "_MEIPASS"):
+        base_path = Path(sys._MEIPASS)
+    else:
+        base_path = Path(__file__).resolve().parent.parent
     return os.path.join(base_path, relative_path)
 
 
