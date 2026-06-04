@@ -16,6 +16,11 @@
 
 SESSION_TYPE="${XDG_SESSION_TYPE:-unknown}"
 USE_XEPHYR="${JOSM_TAGGER_USE_XEPHYR:-0}"
+REQUEST_ONLY_RESTORE=0
+
+if [ "${1:-}" = "--restore" ] || [ "${1:-}" = "restore" ]; then
+    REQUEST_ONLY_RESTORE=1
+fi
 
 start_xephyr_session() {
     local xephyr_display="${JOSM_TAGGER_XEPHYR_DISPLAY:-:99}"
@@ -155,6 +160,34 @@ if [ -z "${APP_COMMAND[*]}" ]; then
 fi
 
 echo "JOSM Tagger command: ${APP_COMMAND[*]}"
+
+RESTORE_HELPER=()
+if [ -x "$SCRIPT_DIR/.venv/bin/python" ]; then
+    RESTORE_HELPER=("$SCRIPT_DIR/.venv/bin/python" "$SCRIPT_DIR/linux_instance_control.py")
+elif command -v python3 >/dev/null 2>&1; then
+    RESTORE_HELPER=(python3 "$SCRIPT_DIR/linux_instance_control.py")
+fi
+
+try_restore_existing_instance() {
+    if [ "${#RESTORE_HELPER[@]}" -eq 0 ]; then
+        return 1
+    fi
+
+    if "${RESTORE_HELPER[@]}" --restore >/dev/null 2>&1; then
+        echo "JOSM Tagger existing instance restored"
+        return 0
+    fi
+
+    return 1
+}
+
+if try_restore_existing_instance; then
+    exit 0
+fi
+
+if [ "$REQUEST_ONLY_RESTORE" = "1" ]; then
+    exit 1
+fi
 
 # Wayland con hotkey globale: avvia la sessione in un Xephyr separato.
 if [ "$SESSION_TYPE" = "wayland" ] && [ "$USE_XEPHYR" = "1" ]; then

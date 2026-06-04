@@ -1,5 +1,7 @@
 import os
 import platform
+import shutil
+import subprocess
 import time
 import urllib.error
 import urllib.parse
@@ -26,6 +28,7 @@ JOSM_REMOTE_AUTO_CONFIRM = True
 JOSM_REMOTE_CONFIRM_DELAY = 0.7
 JOSM_CONTROL_GUI_AUTOMATION = "gui_automation"
 JOSM_CONTROL_REMOTE = "remote_control"
+JOSM_WINDOW_TITLE = "Java OpenStreetMap Editor"
 
 
 def _is_wayland_session():
@@ -165,11 +168,81 @@ def send_tags_gui_automation(pairs, main_root=None):
 
 
 def focus_josm(main_root=None):
+    def _release_topmost():
+        if main_root is None:
+            return
+        try:
+            main_root.attributes("-topmost", False)
+        except Exception:
+            pass
+
+    if is_linux():
+        if main_root is not None:
+            try:
+                if not bool(main_root.attributes("-topmost")):
+                    main_root.attributes("-topmost", True)
+                    main_root.update_idletasks()
+            except Exception:
+                pass
+
+        for command in (
+            ["wmctrl", "-a", JOSM_WINDOW_TITLE],
+            ["xdotool", "search", "--name", JOSM_WINDOW_TITLE],
+        ):
+            if not shutil.which(command[0]):
+                continue
+
+            try:
+                if command[0] == "wmctrl":
+                    print("Activating JOSM window via wmctrl")
+                    subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if main_root is not None:
+                        main_root.after(100, _release_topmost)
+                    time.sleep(0.2)
+                    return True
+
+                print("Searching JOSM window via xdotool")
+                result = subprocess.run(
+                    command,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                window_ids = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+                if not window_ids:
+                    continue
+
+                window_id = window_ids[-1]
+                subprocess.run(
+                    ["xdotool", "windowactivate", "--sync", window_id],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+                subprocess.run(
+                    ["xdotool", "windowraise", window_id],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=2,
+                )
+                if main_root is not None:
+                    main_root.after(100, _release_topmost)
+                time.sleep(0.2)
+                return True
+            except Exception as e:
+                print(f"Could not activate JOSM on Linux using {command[0]}: {e}")
+
+        print("Could not focus JOSM on Linux.")
+        return False
+
     if not gw:
         print("pygetwindow not available, cannot focus JOSM.")
         return False
 
-    windows = gw.getWindowsWithTitle("Java OpenStreetMap Editor")
+    windows = gw.getWindowsWithTitle(JOSM_WINDOW_TITLE)
 
     if not windows:
         return False
@@ -186,13 +259,16 @@ def focus_josm(main_root=None):
             pass
 
     try:
-        print('Activating JOSM window')
-        win.activate()      # TODO - Activate fa sparire main_form E' topmost?.
+        print("Activating JOSM window")
+        win.activate()
     except:
-        print('Restoring JOSM window')
+        print("Restoring JOSM window")
         win.minimize()
         win.restore()
         win.activate()
+
+    if main_root is not None:
+        main_root.after(100, _release_topmost)
 
     time.sleep(0.3)
 

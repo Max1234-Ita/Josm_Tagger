@@ -49,6 +49,8 @@ ZERO_ALIASES = {
     "ins",
 }
 
+ZERO_VARIANTS = ("0", "num 0", "num0", "numpad 0", "numpad0", "insert")
+
 
 def _split_hotkey_parts(hotkey_str):
     return [part.strip().lower() for part in re.split(r"\s*[+-]\s*", hotkey_str) if part.strip()]
@@ -75,11 +77,14 @@ def _build_keyboard_hotkey_variants(hotkey_str):
     normalized_hotkey = _normalize_hotkey_for_keyboard(hotkey_str)
     variants = [normalized_hotkey]
 
-    if "num_0" in normalized_hotkey:
-        variants.extend([
-            normalized_hotkey.replace("num_0", "0"),
-            normalized_hotkey.replace("num_0", "insert"),
-        ])
+    parts = _split_hotkey_parts(hotkey_str)
+    zero_indices = [idx for idx, part in enumerate(parts) if part in ZERO_ALIASES]
+    if zero_indices:
+        for replacement in ZERO_VARIANTS:
+            replaced = list(parts)
+            for idx in zero_indices:
+                replaced[idx] = replacement
+            variants.append("+".join(replaced))
 
     raw_variants = {
         hotkey_str.strip().lower(),
@@ -103,7 +108,7 @@ def _build_keyboard_hotkey_variants(hotkey_str):
     return unique_variants
 
 
-def start_hotkeys(callback, hotkey_str="alt+0"):
+def start_hotkeys(callback, hotkey_str="ctrl+0"):
     print(f"Attempting to register hotkey: '{hotkey_str}' on platform: {sys.platform}")
 
     def run_hotkey_listener():

@@ -329,7 +329,7 @@ Josm Tagger is configured to automatically bring up its main window if the Ctrl-
 3. In Settings → General, verify the JOSM Window Title matches
 4. Try focusing the JOSM window before applying tags
 
-### Hotkey Not Working (Especially on Linux)
+### Hotkey Not Working on Linux
 **Problem**: Global hotkey doesn't respond
 
 **Possible Causes**:
@@ -341,6 +341,28 @@ Josm Tagger is configured to automatically bring up its main window if the Ctrl-
 - On Linux, ensure you're using an X11 session (check `echo $XDG_SESSION_TYPE`)
 - Change the hotkey to something less common
 - Try running JOSM Tagger with elevated permissions (sudo)
+
+**Recommended configuration for not working Hotkey**
+
+In case the hotkey doesn't work, you may want to avoid that JOSM Tagger gets minimzed into the System Tray; here's some option to set to prevent this:
+
+1. Run Josm Tagger;
+
+2. Open menu ***`Edit/Preferences`***;
+
+3. In the ***Behaviour*** section, set as follows:
+
+| Option | Set value |
+| --- | --- |
+| On focus loss | *`Do nothing`*  /  *`Fade out`* |
+| On Apply | *`Keep form visible`* |
+| On close | *`Exit app`* |
+
+<p align="center">
+  <img src="pub/linux_nohotkey_config.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
+</p>
+
+<br>
 
 ### Tags Not Applied to JOSM
 **Problem**: Tags appear in JOSM Tagger but don't show in JOSM
@@ -413,7 +435,7 @@ A: Not at the moment. So far, Ctrl-0 is the only possible key combination to res
 
 
 
-- **Current Version**: 0.1.11
+- **Current Version**: 0.1.12
 - **Author**: Max1234-ITA, 2026
 - **License**: See LICENSE file in the project repository
 

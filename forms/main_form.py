@@ -43,17 +43,20 @@ if sys.platform.startswith("linux"):
         linux_global_hotkeys_status,
         linux_hotkey_matches,
     )
+    from linux_instance_control import INSTANCE_SOCKET_PATH, LinuxInstanceServer
 else:
     start_linux_hotkeys = None
+    LinuxInstanceServer = None
+    INSTANCE_SOCKET_PATH = None
 
     def linux_global_hotkeys_status():
         return "n/a"
 
-    def linux_hotkey_matches(event=None, spec="alt+0"):
+    def linux_hotkey_matches(event=None, spec="ctrl+0"):
         return False
 import effects
 from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
-from josm_interface import send_tags
+from josm_interface import send_tags, focus_josm
 from update_checker import check_for_updates # Re-added import
 from url_launcher import open_url_in_default_browser # Re-added import
 from forms.tag_editor_form import TagEditorForm
@@ -171,6 +174,8 @@ class MainForm:
         self._sending_in_progress = False
         self._update_check_in_progress = False
         self._hotkey_events = queue.Queue()
+        self._linux_instance_server = None
+        self._linux_shortcut_helper_path = Path.home() / "josmtagger.sh"
         print(f"Linux pynput status: {linux_global_hotkeys_status()}")
 
         # Keyboard shortcuts
@@ -237,6 +242,8 @@ class MainForm:
         self.apply_font()
         self.apply_theme()
         self.update_list()
+        self._start_linux_instance_server()
+        self.root.after(800, self._ensure_linux_shortcut_helper)
         self._start_tray_icon()
         self.root.after(2000, self._auto_check_for_updates)
 
@@ -399,13 +406,17 @@ class MainForm:
             m.add_command("Minimize to tray", self.minimize_to_tray)
         ))
         # 4. ABOUT / HELP
-        create_menu_item("   ?   ", lambda m: (
-            m.add_command("Help", self.open_help),
-            m.add_separator(),
-            m.add_command("Check for updates", self.check_for_updates_menu),
-            m.add_separator(),
+        def setup_help_menu(m):
+            m.add_command("Help", self.open_help)
+            m.add_separator()
+            if sys.platform.startswith("linux"):
+                m.add_command("Linux shortcut helper", self._show_linux_shortcut_helper_message)
+                m.add_separator()
+            m.add_command("Check for updates", self.check_for_updates_menu)
+            m.add_separator()
             m.add_command("About", self.show_about)
-        ))
+
+        create_menu_item("   ?   ", setup_help_menu)
 
         # Reset if I click outside (only if NOT a menu widget)
         self.root.bind("<Button-1>", self._check_menu_click_outside, add="+")
@@ -1058,7 +1069,7 @@ class MainForm:
 
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
-        hotkey_str = self.config.get("hotkey", "alt+0")
+        hotkey_str = self.config.get("hotkey", "ctrl+0")
         self._linux_hotkey_spec = hotkey_str
 
         if sys.platform.startswith("linux"):
@@ -1074,6 +1085,92 @@ class MainForm:
             self._hotkey_events.put_nowait(True)
         except Exception:
             pass
+
+    def _linux_shortcut_helper_content(self):
+        socket_path = str(INSTANCE_SOCKET_PATH or (Path.home() / ".josm_tagger_socket"))
+        return f"""#!/bin/sh
+set -eu
+
+SOCKET_PATH="{socket_path}"
+
+if [ ! -S "$SOCKET_PATH" ]; then
+  exit 1
+fi
+
+python3 - "$SOCKET_PATH" <<'PY'
+import socket
+import sys
+
+sock_path = sys.argv[1]
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.settimeout(0.25)
+sock.connect(sock_path)
+sock.sendall(b"RESTORE\\n")
+try:
+    sock.shutdown(socket.SHUT_WR)
+except OSError:
+    pass
+sock.close()
+PY
+"""
+
+    def _ensure_linux_shortcut_helper(self):
+        if not sys.platform.startswith("linux"):
+            return
+
+        helper_path = self._linux_shortcut_helper_path
+        helper_content = self._linux_shortcut_helper_content()
+        needs_message = False
+
+        try:
+            current = helper_path.read_text(encoding="utf-8") if helper_path.exists() else None
+            if current != helper_content:
+                helper_path.write_text(helper_content, encoding="utf-8")
+                needs_message = True
+            helper_path.chmod(0o755)
+        except Exception as e:
+            print(f"Warning: could not create Linux shortcut helper {helper_path}: {e}")
+            return
+
+        updates_cfg = self.config.setdefault("linux", {})
+        if not updates_cfg.get("shortcut_helper_notice_shown"):
+            needs_message = True
+            updates_cfg["shortcut_helper_notice_shown"] = True
+            save_config(self.config)
+
+        if needs_message:
+            self.root.after(200, self._show_linux_shortcut_helper_message)
+
+    def _show_linux_shortcut_helper_message(self):
+        helper_path = self._linux_shortcut_helper_path
+        messagebox.showinfo(
+            "Linux shortcut helper",
+            (
+                "JOSM Tagger ha creato un helper per il richiamo rapido:\n\n"
+                f"  {helper_path}\n\n"
+                "Configura la scorciatoia di sistema per eseguire quel file.\n"
+                "Flusso consigliato:\n"
+                "1. Avvia JOSM Tagger una volta con il launcher normale.\n"
+                "2. Associa la scorciatoia di sistema a ~/josmtagger.sh.\n"
+                "3. Da quel momento la scorciatoia riattiva l'istanza già aperta\n"
+                "   e non crea una nuova istanza."
+            ),
+            parent=self.root,
+        )
+
+    def _start_linux_instance_server(self):
+        if not sys.platform.startswith("linux"):
+            return
+        if LinuxInstanceServer is None:
+            print("Linux instance restore IPC unavailable.")
+            return
+        try:
+            self._linux_instance_server = LinuxInstanceServer(
+                self._queue_hotkey_trigger
+            ).start()
+            print("Linux instance restore IPC: active")
+        except Exception as e:
+            print(f"Warning: Linux instance restore IPC failed: {e}")
 
     def _process_hotkey_events(self):
         if self._is_exiting:
@@ -1112,12 +1209,21 @@ class MainForm:
     def focus_input(self):
         self.restore_main_form()
 
-    def _force_focus(self):
+    def _activate_entry_for_next_command(self):
+        """Put focus back on the command textbox and prepare it for typing."""
         try:
-            self.root.focus_force()
+            if self.entry is None or not self.entry.winfo_exists():
+                return
             self.entry.focus_set()
             self.entry.icursor(tk.END)
             self.entry.select_range(0, tk.END)
+        except Exception:
+            pass
+
+    def _force_focus(self):
+        try:
+            self.root.focus_force()
+            self._activate_entry_for_next_command()
         except:
             pass
 
@@ -1269,8 +1375,10 @@ class MainForm:
         self._sending_in_progress = True
         self._block_focus_out = True
         self._render_preview(code)
+        sent_ok = False
 
         def worker():
+            nonlocal sent_ok
             # Conditional import of pyautogui for Windows only
             if sys.platform.startswith("win"):
                 import pyautogui
@@ -1320,7 +1428,7 @@ class MainForm:
                     self._block_focus_out = False
                     return
 
-                send_tags(
+                sent_ok = send_tags(
                     tags_list,
                     main_root=self.root,
                     control_method=control_method, # Use the determined control_method
@@ -1335,6 +1443,9 @@ class MainForm:
 
                     if generic_found:
                         self._show_generic_tags_warning()
+
+                    if sent_ok:
+                        focus_josm(main_root=self.root)
 
                     self._sending_in_progress = False
                     self.allow_minimize = True
@@ -1455,7 +1566,7 @@ class MainForm:
         return self.show_history_menu_keyboard(event)
 
     def _on_global_keypress(self, event=None):
-        if sys.platform.startswith("linux") and linux_hotkey_matches(event, getattr(self, "_linux_hotkey_spec", "alt+0")):
+        if sys.platform.startswith("linux") and linux_hotkey_matches(event, getattr(self, "_linux_hotkey_spec", "ctrl+0")):
             self._queue_hotkey_trigger()
             return "break"
 
@@ -1802,6 +1913,7 @@ class MainForm:
     def _on_focus_in(self, event=None):
         """Fade-in only when necessary, with debounce."""
         effects.fade_away = True
+        self.root.after_idle(self._activate_entry_for_next_command)
 
         now = time.time()
 
@@ -1983,6 +2095,11 @@ class MainForm:
             if self.tray_icon is not None:
                 self.tray_icon.visible = False
                 self.tray_icon.stop()
+        except Exception:
+            pass
+        try:
+            if self._linux_instance_server is not None:
+                self._linux_instance_server.stop()
         except Exception:
             pass
         self.tray_running = False
