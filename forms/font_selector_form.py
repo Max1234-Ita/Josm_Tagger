@@ -1,6 +1,9 @@
 import tkinter as tk
 from tkinter import font
 from config_manager import save_config
+import os
+import sys
+from pathlib import Path
 from effects import apply_background_picture, get_active_theme, apply_theme_colors
 from forms.base_form import BaseForm
 
@@ -57,7 +60,10 @@ class FontSelectorForm(BaseForm):
 
         # ---------------- ICON ----------------
         try:
-            base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+            if hasattr(sys, "_MEIPASS"):
+                base_path = Path(sys._MEIPASS)
+            else:
+                base_path = Path(__file__).resolve().parent.parent
             icon_path_win = os.path.join(base_path, "resources", "josm_tagger.ico")
             icon_path_linux = os.path.join(base_path, "resources", "josm_tagger.png")
 
@@ -179,6 +185,7 @@ class FontSelectorForm(BaseForm):
         self.preview_label = tk.Label(
             self,
             text="The quick brown fox jumps over the lazy dog",
+            # text="Omnia Gallia divisa est in partes tres -- 0123456789",
             bg=self.panel_color,
             fg=self.panel_fg,
             relief="solid",

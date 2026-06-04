@@ -1,0 +1,65 @@
+# e che questo script (.sh) sia nella stessa directory.
+# Se il pacchetto .deb lo installa in /usr/bin, il percorso sarà diverso.
+# Esempio per un'installazione .deb standard: APP_EXECUTABLE="/usr/bin/josmtagger"
+APP_EXECUTABLE="$(dirname "$0")/josmtagger" # Cerca l'eseguibile nella stessa directory dello script
+
+# Se l'eseguibile non si trova nella stessa directory, prova un percorso comune per i pacchetti .deb
+if [ ! -f "$APP_EXECUTABLE" ]; then
+    APP_EXECUTABLE="/usr/bin/josmtagger"
+fi
+
+# Verifica se l'eseguibile esiste
+if [ ! -f "$APP_EXECUTABLE" ]; then
+    echo "ERRORE: Eseguibile di JOSM Tagger non trovato in $APP_EXECUTABLE."
+    echo "Assicurati che l'applicazione sia installata correttamente."
+    exit 1
+fi
+
+# Esegui l'applicazione
+exec "$APP_EXECUTABLE"
+Spiegazione per il documento utente:
+◦
+export DISPLAY=:0.0: Come hai notato, questo è fondamentale per l'esecuzione in ambienti specifici. Spiega che è un tentativo di default e che potrebbe dover essere adattato. Per la maggior parte degli utenti desktop, non sarà necessario interagire con questo.
+◦
+APP_EXECUTABLE: Il tuo script dovrà puntare all'eseguibile corretto. Se il .deb lo installa in /usr/bin/josmtagger, lo script può essere molto più semplice (exec /usr/bin/josmtagger). Se invece PyInstaller crea una directory con l'eseguibile all'interno, lo script dovrà navigare in quella directory o puntare al percorso corretto. La versione che ti ho fornito cerca prima nella stessa directory e poi in /usr/bin.
+2.
+Distribuzione tramite PyInstaller e dipendenze: Hai ragione, se la distribuzione avviene tramite PyInstaller, tutte le dipendenze Python (come pynput, pystray, Pillow) dovrebbero essere incluse nel pacchetto finale. Questo significa che l'utente finale non dovrà eseguire pip install.
+Tuttavia, PyInstaller non include le dipendenze a livello di sistema operativo. Alcune librerie Python (come pynput e pystray) si basano su librerie di sistema per funzionare correttamente.
+Punti da includere nel documento utente riguardo le dipendenze:
+◦
+Dipendenze di sistema (potrebbero essere necessarie):
+▪
+Anche se JOSM Tagger è un'applicazione Python, alcune delle sue funzionalità (come le hotkey globali e l'icona nella barra di sistema) si basano su librerie native del sistema operativo.
+▪
+Il tuo pacchetto .deb dovrebbe idealmente dichiarare queste dipendenze in modo che vengano installate automaticamente. Se non lo fa, l'utente potrebbe doverle installare manualmente.
+▪
+Esempi di pacchetti di sistema comuni (per Debian/Ubuntu):
+▪
+python3-xlib: Spesso richiesto da pynput per l'interazione con il server X.
+▪
+python3-gi e python3-tk: Per l'integrazione con l'ambiente desktop e il toolkit grafico.
+▪
+libappindicator3-1: Per l'icona nella barra di sistema (tray icon) su alcuni ambienti desktop.
+▪
+Comando di esempio per installare queste dipendenze (su Debian/Ubuntu):
+Shell Script
+sudo apt update
+sudo apt install python3-xlib python3-gi python3-tk libappindicator3-1
+▪
+Nota: I nomi dei pacchetti possono variare leggermente tra le diverse distribuzioni Linux.
+3.
+JOSM Remote Control: Questo punto rimane invariato e cruciale. L'utente deve assicurarsi che JOSM sia in esecuzione e che il plugin "Remote Control" sia abilitato.
+4.
+Hotkey Globali su Wayland: Anche questo punto rimane invariato. È una limitazione intrinseca di Wayland e la soluzione è configurare una scorciatoia a livello di sistema operativo che esegua lo script .sh che avvia/focalizza JOSM Tagger.
+Riepilogo per il documento utente:
+•
+Avvio dell'applicazione: Spiegare che l'applicazione può essere avviata tramite l'icona nel menu o tramite il file .sh fornito.
+•
+Problemi di DISPLAY: Spiegare che export DISPLAY=:0.0 potrebbe essere necessario solo in casi specifici (es. SSH) e che per l'uso desktop normale non serve.
+•
+Dipendenze di sistema: Elencare le dipendenze di sistema comuni e il comando sudo apt install per installarle, specificando che il pacchetto .deb dovrebbe gestirle automaticamente ma che in caso di problemi questa è la soluzione.
+•
+JOSM Remote Control: Ricordare di abilitare il plugin in JOSM.
+•
+Hotkey su Wayland: Spiegare la limitazione e la soluzione alternativa tramite scorciatoie di sistema.
+Questo dovrebbe coprire tutti gli scenari più comuni per un utente Linux

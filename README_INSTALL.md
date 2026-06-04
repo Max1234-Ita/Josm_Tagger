@@ -39,7 +39,7 @@ Su Debian/Ubuntu installa anche:
 
 ```bash
 sudo apt update
-sudo apt install -y python3-tk libcanberra-gtk-module libcanberra-gtk3-module
+sudo apt install -y python3-tk libcanberra-gtk-module libcanberra-gtk3-module xserver-xephyr
 ```
 
 ## 5) Configurazione consigliata di `pystray`
@@ -65,10 +65,19 @@ python main.py
 - L'app cerca la finestra JOSM con titolo **"Java OpenStreetMap Editor"**.
 - Configurazione UI e geometria vengono salvate in `config.json`.
 - I codici/tag usati dall'app sono in `codes.json`.
+- Su Linux, al primo avvio viene creato `~/josmtagger.sh` come helper per il richiamo rapido.
+- La scorciatoia di sistema va configurata per eseguire `~/josmtagger.sh` e non deve avviare una nuova istanza.
 
 ## 8) Problemi comuni
 
-- **Hotkey non funziona su Linux**: prova a eseguire in sessione X11 (su Wayland alcuni hook globali sono limitati).
+- **Hotkey non funziona su Linux**: se sei su Wayland e vuoi mantenere il desktop attuale, avvia JOSM Tagger in un server X annidato con Xephyr:
+  ```bash
+  JOSM_TAGGER_USE_XEPHYR=1 ./josmtagger.sh
+  ```
+  In questo modo l'app gira in un ambiente X11 compatibile e la hotkey globale continua a funzionare.
+- Per richiamare l'istanza già aperta, configura la scorciatoia di sistema su `~/josmtagger.sh`.
+- Se invece vuoi una sessione X11 vera, esci e al login scegli una sessione X11/Xorg.
+- Verifica con `echo $XDG_SESSION_TYPE`: in una sessione X11 vera deve stampare `x11`.
 - **Finestra JOSM non trovata**: verifica che JOSM sia aperto e che il titolo finestra corrisponda.
 - **Errore Tkinter su Linux**: verifica installazione di `python3-tk`.
 

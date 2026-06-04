@@ -1,9 +1,9 @@
 {
-  "hotkey": "ctrl+num 0",
-  "font_family": "Calibri",
-  "font_size": 11,
+  "hotkey": "ctrl+0",
+  "font_family": "Lato",
+  "font_size": 10,
   "ui_scale": 1.0,
-  "dark_theme_enabled": true,
+  "dark_theme_enabled": false,
   "theme": {
     "bg": "#f0f0f0",
     "fg": "#101010",
@@ -16,16 +16,16 @@
     "fg": "#949494",
     "picture": null,
     "panel": "#3d434e",
-    "panel_fg": "#c0c0c0"
+    "panel_fg": "#949494"
   },
-  "geometry_tag_editor": "487x358+252+223",
-  "geometry_font_selector": "420x360+873+258",
+  "geometry_tag_editor": "487x358+236+193",
+  "geometry_font_selector": "420x360+0+0",
   "about_form_geometry": "300x340+104+104",
   "geometry": {
     "main_form": {
-      "x": 41,
-      "y": 63,
-      "w": 342,
+      "x": 113,
+      "y": 197,
+      "w": 256,
       "h": 320
     },
     "list_height": 212
@@ -36,38 +36,44 @@
   "preview_height": 160,
   "upper_height": 160,
   "behaviour": {
-    "on_focus_loss": "fade_out",
+    "on_focus_loss": "do_nothing",
     "on_apply": "minimize_to_tray",
-    "on_close": "minimize_to_tray",
+    "on_close": "exit_app",
     "transparency_active": 100,
     "transparency_faded": 35,
     "hide_delay": 150,
     "fade_delay": 120,
-    "fade_duration_ms": 500
+    "fade_duration_ms": 250
   },
   "command_history_items": 20,
   "command_history": [
+    "tr",
+    "mdw",
+    "gar",
     "bg",
+    "nn",
+    "bf",
+    "fw",
+    "hcr",
     "bh",
+    "tt3",
     "eny",
     "pfw",
-    "bl2",
-    "bl4",
-    "noa",
-    "gar",
-    "bf",
-    "recy",
-    "ony",
     "bl3",
-    "nn",
-    "pser",
+    "bl5",
+    "recy",
     "t",
-    "tr",
-    "fw",
-    "tg",
-    "tub",
-    "leisw"
+    "bl2",
+    "pser",
+    "bw",
+    "bl4"
   ],
-  "geometry_search": "761x500+726+52",
-  "geometry_options": "312x532+404+52"
+  "geometry_search": "761x500+125+67",
+  "geometry_options": "274x574+0+0",
+  "josm_control_method": "remote_control",
+  "geometry_tag_properties": "352x114+483+519",
+  "updates": {
+    "auto_check": true,
+    "last_check_utc": "2026-06-02T14:46:42.462733+00:00"
+  }
 }
