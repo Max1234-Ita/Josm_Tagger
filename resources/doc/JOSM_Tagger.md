@@ -11,38 +11,41 @@ It provides quick tag assignment using mnemonic codes, tag group management, and
 
 1. [Getting Started](#getting-started)
    - [System Requirements](#system-requirements)
-2. [Installation](#installation)
-3. [Launching the Application](#launching-the-application)
-4. [Quick Overview](#quick-overview)
-5. [Tag Groups](#tag-groups)
-6. [Searching for Tags](#searching-for-tags)
-7. [Creating and Modifying Tag Groups](#creating-and-modifying-tag-groups)
-8. [Program Settings](#program-settings)
-9. [Application Font](#application-font)
-10. [Global Hotkey Activation](#global-hotkey-activation)
-11. [Troubleshooting](#troubleshooting)
-12. [Frequently Asked Questions](#frequently-asked-questions)
-13. [Getting Help](#getting-help)
-14. [Version Information](#version-information)
+   - [Installation](#installation)
+2. [Launching the Application](#launching-the-application)
+3. [Quick Overview - How it works](#quick-overview)
+4. [Tag Groups](#tag-groups)
+5. [Searching for Tags](#searching-for-tags)
+6. [Creating and Modifying Tag Groups](#creating-and-modifying-tag-groups)
+7. [Program Settings](#program-settings)
+8. [Application Font](#application-font)
+9. [Global Hotkey Activation](#global-hotkey-activation)
+10. [Troubleshooting](#troubleshooting)
+11. [Frequently Asked Questions](#frequently-asked-questions)
+12. [Getting Help](#getting-help)
+13. [Version Information](#version-information)
 
 ---
 
+<a id="getting-started"></a>
 ## Getting Started
 
+<a id="system-requirements"></a>
 ### System Requirements
 - **Windows**: Windows 10/11 (64-bit)
 - **Linux**: Ubuntu 20.04+ / Debian 11+ (or equivalent)
 - **JOSM Editor**: Must be installed and running when using the application
 
-## Installation
+<a id="installation"></a>
+### Installation
 
-### <u>Windows</u>
+#### <u>Windows</u>
 1. Download the `.exe` installer from the releases page
 2. Run the installer (it will extract the PyInstaller bundle)
 3. Launch **JOSM Tagger.exe** from the Start Menu or desktop shortcut
 
 
-### <u>Linux</u>
+#### <u>Linux</u>
 1. Download the `.deb` package from the releases page
 2. Install it:
 ```bash
@@ -54,6 +57,7 @@ It provides quick tag assignment using mnemonic codes, tag group management, and
 
 ---
 
+<a id="launching-the-application"></a>
 ## Launching the Application
 
 ### <u>Windows</u>
@@ -70,6 +74,7 @@ It provides quick tag assignment using mnemonic codes, tag group management, and
 
 ---
 
+<a id="quick-overview"></a>
 ## Quick Overview
 
 ### How It Works
@@ -91,6 +96,7 @@ It provides quick tag assignment using mnemonic codes, tag group management, and
 ### Important: Whatever the Operating system, JOSM must be open and at least one map element selected before using the "Apply" function.
 
 
+<a id="tag-groups"></a>
 ## Tag groups
 In JOSM Tagger, one or more OSM tags can be grouped under a short mnemonic code, which can be quickly recalled by typing its name.
 #### The *Code* text box
@@ -157,6 +163,7 @@ The list in the middle part of the window can be browsed to see which tags group
 
 ---
 
+<a id="searching-for-tags"></a>
 ## Searching for Tags
 
 Need to know which groups contain a particular tag? The ***Search*** function comes to help!
@@ -193,6 +200,7 @@ Need to know which groups contain a particular tag? The ***Search*** function co
 ---
 
 
+<a id="creating-and-modifying-tag-groups"></a>
 ## Creating and modifying Tag Groups
 
 The existing groups can be modified or deleted if not needed; You also can create new ones to suit particular needs.
@@ -274,6 +282,7 @@ Josm Tagger will detect the "generic" value when applying the tag group, and wil
 ---
 
 
+<a id="program-settings"></a>
 ## Program Settings
 
 This menu allows some customization to the program's interface and behaviour.
@@ -303,12 +312,14 @@ Each method has its up and down sides: *GUI automation* doesn't need particular 
 
 ---
 
+<a id="application-font"></a>
 ## Application font
 The font style and size can be customized by selecting `View >> Font`. Set the desired options, the click [ Apply ] to confirm your choice.
 
 ---
 
 
+<a id="global-hotkey-activation"></a>
 ## Global Hotkey Activation
 
 Josm Tagger is configured to automatically bring up its main window if the Ctrl-0 hotkey is detected.
@@ -318,6 +329,7 @@ Josm Tagger is configured to automatically bring up its main window if the Ctrl-
 
 ---
 
+<a id="troubleshooting"></a>
 ## Troubleshooting
 
 ### JOSM Window Not Found
@@ -400,6 +412,7 @@ sudo apt install -y python3-tk libcanberra-gtk-module libcanberra-gtk3-module
 
 ---
 
+<a id="frequently-asked-questions"></a>
 ## Frequently Asked Questions
 
 **Q: Can I edit the mnemonic codes?**  
@@ -421,6 +434,7 @@ A: Not at the moment. So far, Ctrl-0 is the only possible key combination to res
 
 ---
 
+<a id="getting-help"></a>
 ## Getting Help
 
 - **Report Bugs**: Visit the project repository and open an issue
@@ -431,6 +445,7 @@ A: Not at the moment. So far, Ctrl-0 is the only possible key combination to res
 
 ---
 
+<a id="version-information"></a>
 ## Version Information
 
 
@@ -443,4 +458,3 @@ A: Not at the moment. So far, Ctrl-0 is the only possible key combination to res
 
 **Last Updated**: May 2026  
 **For the latest version and updates, visit the project repository.**
-
