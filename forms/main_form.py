@@ -1147,14 +1147,14 @@ PY
         messagebox.showinfo(
             "Linux shortcut helper",
             (
-                "JOSM Tagger ha creato un helper per il richiamo rapido:\n\n"
+                "JOSM Tagger has created a helper for quick launching:\n\n"
                 f"  {helper_path}\n\n"
-                "Configura la scorciatoia di sistema per eseguire quel file.\n"
-                "Flusso consigliato:\n"
-                "1. Avvia JOSM Tagger una volta con il launcher normale.\n"
-                "2. Associa la scorciatoia di sistema a ~/josmtagger.sh.\n"
-                "3. Da quel momento la scorciatoia riattiva l'istanza già aperta\n"
-                "   e non crea una nuova istanza."
+                "Configure your system shortcut to run that file.\n"
+                "Recommended flow:\n"
+                "1. Start JOSM Tagger once with the normal launcher.\n"
+                "2. Assign the system shortcut to ~/josmtagger.sh.\n"
+                "3. From that point on, the shortcut reactivates the already open\n"
+                "   instance and does not create a new one."
             ),
             parent=self.root,
         )
