@@ -5,6 +5,7 @@
 import argparse
 import os
 import platform
+import ast
 import re
 import shutil
 import subprocess
@@ -27,12 +28,62 @@ def run(cmd, cwd=PROJECT_ROOT):
 
 
 def read_version():
-    main_py = PROJECT_ROOT / "main.py"
-    text = main_py.read_text(encoding="utf-8")
-    match = re.search(r"^appversion\s*=\s*['\"]([^'\"]+)['\"]", text, re.MULTILINE)
-    if not match:
-        raise RuntimeError("Cannot find appversion in main.py")
-    return match.group(1)
+    def _read_version_from_text(path, variable_names):
+        text = path.read_text(encoding="utf-8")
+
+        try:
+            tree = ast.parse(text, filename=str(path))
+        except SyntaxError:
+            tree = None
+
+        if tree is not None:
+            constants = {}
+            imports = {}
+
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                    target = node.targets[0].id
+                    value = node.value
+                    if isinstance(value, ast.Constant) and isinstance(value.value, str):
+                        constants[target] = value.value
+                    elif isinstance(value, ast.Name) and value.id in constants:
+                        constants[target] = constants[value.id]
+                elif isinstance(node, ast.ImportFrom):
+                    for alias in node.names:
+                        imports[alias.asname or alias.name] = (node.module, alias.name)
+
+            for name in variable_names:
+                if name in constants:
+                    return constants[name]
+
+            for name in variable_names:
+                if name in imports:
+                    module, imported_name = imports[name]
+                    if module == "app_metadata" and imported_name == "APP_VERSION":
+                        return _read_version_from_text(PROJECT_ROOT / "app_metadata.py", ("APP_VERSION",))
+
+        for name in variable_names:
+            match = re.search(
+                rf"^{re.escape(name)}\s*=\s*['\"]([^'\"]+)['\"]",
+                text,
+                re.MULTILINE,
+            )
+            if match:
+                return match.group(1)
+
+        raise RuntimeError(f"Cannot find version in {path.name}")
+
+    for candidate, names in (
+        (PROJECT_ROOT / "main.py", ("appversion",)),
+        (PROJECT_ROOT / "app_metadata.py", ("APP_VERSION",)),
+    ):
+        if candidate.exists():
+            try:
+                return _read_version_from_text(candidate, names)
+            except RuntimeError:
+                continue
+
+    raise RuntimeError("Cannot find app version in main.py or app_metadata.py")
 
 
 def detect_arch():
