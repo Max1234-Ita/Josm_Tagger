@@ -4,7 +4,7 @@ import os
 import tkinter as tk
 from PIL import Image, ImageTk
 
-from config_manager import load_config
+from config_manager import debug_print, load_config
 
 # Global flag to signal that a form is being opened, used to abort fading in MainForm
 is_any_form_opening = False
@@ -76,7 +76,7 @@ class TransparencyFader:
             self._fade_job = self.widget.after(15, step)
 
         # -----------------------------------------------------
-        print(f'Fading {start_alpha} -> {end_alpha} in {duration_ms} ms')
+        debug_print(f'Fading {start_alpha} -> {end_alpha} in {duration_ms} ms', cfg=getattr(self.owner, "config", None))
 
 
         if start_alpha != end_alpha:
@@ -88,7 +88,7 @@ class TransparencyFader:
             delta = (end_alpha - start_alpha) / steps
             current = start_alpha
         else:
-            print(' -> (skipped)')
+            debug_print(' -> (skipped)', cfg=getattr(self.owner, "config", None))
             return
 
         # quando parte un fade, blocchiamo focus_in

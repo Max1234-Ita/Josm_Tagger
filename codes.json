@@ -538,5 +538,15 @@
             "key": "oneway",
             "value": "yes"
         }
+    ],
+    "tun": [
+        {
+            "key": "tunnel",
+            "value": "yes"
+        },
+        {
+            "key": "layer",
+            "value": "-1"
+        }
     ]
 }

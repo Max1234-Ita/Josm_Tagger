@@ -1,5 +1,4 @@
 import tkinter as tk
-import fcntl
 import os
 import signal
 import sys
@@ -7,6 +6,11 @@ import time
 from pathlib import Path
 from app_metadata import APP_AUTHOR, APP_INFO, APP_NAME, APP_VERSION
 from forms.main_form import MainForm
+
+if sys.platform.startswith("win"):
+    import msvcrt
+else:
+    import fcntl
 
 appname = APP_NAME
 appversion = APP_VERSION
@@ -20,6 +24,7 @@ appicon_png = 'resources/josm_tagger.png'  # Path to the PNG icon file (relative
 LOCK_FILE_PATH = Path.home() / ".josm_tagger_lock"
 PID_FILE_PATH = Path.home() / ".josm_tagger.pid"
 LOCK_FILE = None
+LOCK_SIZE = 1
 
 
 def _read_lock_pid():
@@ -129,6 +134,28 @@ def _clear_lock_files():
         except OSError:
             pass
 
+
+def _acquire_file_lock(handle):
+    if sys.platform.startswith("win"):
+        handle.seek(0)
+        handle.write("\0")
+        handle.flush()
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, LOCK_SIZE)
+    else:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _release_file_lock(handle):
+    if sys.platform.startswith("win"):
+        try:
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, LOCK_SIZE)
+        except OSError:
+            pass
+    else:
+        fcntl.flock(handle, fcntl.LOCK_UN)
+
 def acquire_lock():
     global LOCK_FILE
     try:
@@ -136,7 +163,7 @@ def acquire_lock():
             global LOCK_FILE
             LOCK_FILE = open(LOCK_FILE_PATH, 'a+', encoding="utf-8")
             # Acquire an exclusive lock, non-blocking
-            fcntl.flock(LOCK_FILE, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            _acquire_file_lock(LOCK_FILE)
             pid_text = str(os.getpid())
             LOCK_FILE.seek(0)
             LOCK_FILE.truncate()
@@ -189,7 +216,7 @@ def acquire_lock():
 def release_lock():
     global LOCK_FILE
     if LOCK_FILE:
-        fcntl.flock(LOCK_FILE, fcntl.LOCK_UN)
+        _release_file_lock(LOCK_FILE)
         LOCK_FILE.close()
         LOCK_FILE = None
         print(f"Released lock: {LOCK_FILE_PATH}")

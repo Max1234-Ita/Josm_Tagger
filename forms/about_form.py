@@ -171,7 +171,7 @@ class AboutForm(BaseForm):
         else:
             self.geometry(f"{default_w}x{default_h}")
 
-    def _save_geometry(self):
+    def _save_geometry(self, event=None):
         if not self.config:
             return
 

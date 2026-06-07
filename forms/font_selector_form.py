@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import font
-from config_manager import save_config
+from config_manager import debug_print, save_config
 import os
 import sys
 from pathlib import Path
@@ -209,7 +209,7 @@ class FontSelectorForm(BaseForm):
         try:
             self.fonts = sorted(set(font.families()))
         except Exception as e:
-            print(f"Error loading fonts: {e}")
+            debug_print(f"Error loading fonts: {e}", cfg=self.config)
             self.fonts = ["Arial", "Courier New", "Times New Roman", "Segoe UI"]
 
         if not self.fonts:

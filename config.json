@@ -18,13 +18,13 @@
     "panel": "#3d434e",
     "panel_fg": "#949494"
   },
-  "geometry_tag_editor": "487x358+236+193",
+  "geometry_tag_editor": "487x324+225+241",
   "geometry_font_selector": "420x360+0+0",
-  "about_form_geometry": "300x340+104+104",
+  "about_form_geometry": "300x340+81+112",
   "geometry": {
     "main_form": {
-      "x": 113,
-      "y": 197,
+      "x": 41,
+      "y": 72,
       "w": 256,
       "h": 320
     },
@@ -36,7 +36,7 @@
   "preview_height": 160,
   "upper_height": 160,
   "behaviour": {
-    "on_focus_loss": "do_nothing",
+    "on_focus_loss": "fade_out",
     "on_apply": "minimize_to_tray",
     "on_close": "exit_app",
     "transparency_active": 100,
@@ -47,33 +47,34 @@
   },
   "command_history_items": 20,
   "command_history": [
-    "tr",
-    "mdw",
-    "gar",
-    "bg",
-    "nn",
     "bf",
-    "fw",
-    "hcr",
-    "bh",
-    "tt3",
-    "eny",
-    "pfw",
-    "bl3",
-    "bl5",
-    "recy",
-    "t",
-    "bl2",
     "pser",
+    "tr",
+    "bh",
+    "bsh",
+    "grg",
+    "t",
+    "bg",
+    "recy",
     "bw",
-    "bl4"
+    "roof",
+    "b",
+    "gar",
+    "pfw",
+    "eny",
+    "nn",
+    "acp",
+    "fw",
+    "grgs",
+    "bl6"
   ],
-  "geometry_search": "761x500+125+67",
-  "geometry_options": "274x574+0+0",
+  "geometry_search": "761x500+310+288",
+  "geometry_options": "309x579+340+206",
   "josm_control_method": "remote_control",
-  "geometry_tag_properties": "352x114+483+519",
+  "geometry_tag_properties": "349x106+478+544",
   "updates": {
     "auto_check": true,
-    "last_check_utc": "2026-06-02T14:46:42.462733+00:00"
-  }
+    "last_check_utc": "2026-06-07T14:15:22.817839+00:00"
+  },
+  "debug_mode": false
 }

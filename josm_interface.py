@@ -7,6 +7,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from config_manager import debug_print, is_debug_mode
+
 # Conditional import for Windows-specific libraries
 if platform.system() == "Windows":
     try:
@@ -29,6 +31,7 @@ JOSM_REMOTE_CONFIRM_DELAY = 0.7
 JOSM_CONTROL_GUI_AUTOMATION = "gui_automation"
 JOSM_CONTROL_REMOTE = "remote_control"
 JOSM_WINDOW_TITLE = "Java OpenStreetMap Editor"
+DEBUG_MODE = is_debug_mode()
 
 
 def _is_wayland_session():
@@ -55,21 +58,21 @@ def _remote_control_request(path, params=None):
     if query:
         url = f"{url}?{query}"
 
-    print(f"Calling JOSM Remote Control: {url}")
+    debug_print(f"Calling JOSM Remote Control: {url}", cfg=DEBUG_MODE)
     try:
         with urllib.request.urlopen(url, timeout=2) as response:
             body = response.read().decode("utf-8", errors="replace")
-            print(f"JOSM Remote Control status: {response.status}")
+            debug_print(f"JOSM Remote Control status: {response.status}", cfg=DEBUG_MODE)
             if body:
-                print(f"JOSM Remote Control response: {body[:500]}")
+                debug_print(f"JOSM Remote Control response: {body[:500]}", cfg=DEBUG_MODE)
             return 200 <= response.status < 300
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
-        print(f"JOSM Remote Control HTTP error: {e.code} {body[:500]}")
+        debug_print(f"JOSM Remote Control HTTP error: {e.code} {body[:500]}", cfg=DEBUG_MODE)
     except urllib.error.URLError as e:
-        print(f"JOSM Remote Control unavailable: {e}")
+        debug_print(f"JOSM Remote Control unavailable: {e}", cfg=DEBUG_MODE)
     except Exception as e:
-        print(f"JOSM Remote Control failed: {e}")
+        debug_print(f"JOSM Remote Control failed: {e}", cfg=DEBUG_MODE)
 
     return False
 
@@ -83,24 +86,24 @@ def _confirm_remote_control_dialog():
         return
 
     if is_linux():
-        print("Skipping auto-confirm on Linux.")
+        debug_print("Skipping auto-confirm on Linux.", cfg=DEBUG_MODE)
         return
 
-    print("Trying to confirm JOSM Remote Control dialog")
+    debug_print("Trying to confirm JOSM Remote Control dialog", cfg=DEBUG_MODE)
     time.sleep(JOSM_REMOTE_CONFIRM_DELAY)
     try:
         if pyautogui:
             pyautogui.FAILSAFE = False
             pyautogui.press("enter")
-            print("Sent Enter to confirm JOSM Remote Control dialog")
+            debug_print("Sent Enter to confirm JOSM Remote Control dialog", cfg=DEBUG_MODE)
         else:
-            print("pyautogui not available, skipping auto-confirm.")
+            debug_print("pyautogui not available, skipping auto-confirm.", cfg=DEBUG_MODE)
     except Exception as e:
-        print(f"Could not auto-confirm JOSM Remote Control dialog: {e}")
+        debug_print(f"Could not auto-confirm JOSM Remote Control dialog: {e}", cfg=DEBUG_MODE)
 
 
 def send_tags_remote_control(pairs):
-    print("Trying JOSM Remote Control")
+    debug_print("Trying JOSM Remote Control", cfg=DEBUG_MODE)
 
     if not _remote_control_request("/version"):
         print(
@@ -144,7 +147,7 @@ def send_tags_gui_automation(pairs, main_root=None):
     time.sleep(0.2)
 
     for i, p in enumerate(pairs):
-        print(f"Sending pair: {p['key']}={p['value']}")
+        debug_print(f"Sending pair: {p['key']}={p['value']}", cfg=DEBUG_MODE)
         pyautogui.hotkey("ctrl", "a")
         pyautogui.press("delete")
 
@@ -194,14 +197,14 @@ def focus_josm(main_root=None):
 
             try:
                 if command[0] == "wmctrl":
-                    print("Activating JOSM window via wmctrl")
+                    debug_print("Activating JOSM window via wmctrl", cfg=DEBUG_MODE)
                     subprocess.run(command, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     if main_root is not None:
                         main_root.after(100, _release_topmost)
                     time.sleep(0.2)
                     return True
 
-                print("Searching JOSM window via xdotool")
+                debug_print("Searching JOSM window via xdotool", cfg=DEBUG_MODE)
                 result = subprocess.run(
                     command,
                     check=False,
@@ -233,7 +236,7 @@ def focus_josm(main_root=None):
                 time.sleep(0.2)
                 return True
             except Exception as e:
-                print(f"Could not activate JOSM on Linux using {command[0]}: {e}")
+                debug_print(f"Could not activate JOSM on Linux using {command[0]}: {e}", cfg=DEBUG_MODE)
 
         print("Could not focus JOSM on Linux.")
         return False
@@ -259,10 +262,10 @@ def focus_josm(main_root=None):
             pass
 
     try:
-        print("Activating JOSM window")
+        debug_print("Activating JOSM window", cfg=DEBUG_MODE)
         win.activate()
     except:
-        print("Restoring JOSM window")
+        debug_print("Restoring JOSM window", cfg=DEBUG_MODE)
         win.minimize()
         win.restore()
         win.activate()
@@ -276,7 +279,7 @@ def focus_josm(main_root=None):
 
 def send_tags(pairs, main_root=None, control_method=None):
     method = resolve_control_method(control_method)
-    print(f"Using JOSM control method: {method}")
+    debug_print(f"Using JOSM control method: {method}", cfg=DEBUG_MODE)
 
     if method == JOSM_CONTROL_REMOTE:
         return send_tags_remote_control(pairs)
