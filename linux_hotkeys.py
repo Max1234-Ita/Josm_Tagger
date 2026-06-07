@@ -2,6 +2,8 @@ import re
 import sys
 import threading
 
+from config_manager import debug_print, is_debug_mode
+
 # Conditional import for Linux hotkey backends.
 pynput_keyboard = None
 try:
@@ -16,6 +18,8 @@ try:
         import keyboard as keyboard_lib
 except ImportError:
     pass
+
+DEBUG_MODE = is_debug_mode()
 
 
 def linux_global_hotkeys_available():
@@ -184,7 +188,7 @@ def start_hotkeys(callback, hotkey_str="ctrl+0"):
                     pynput_keyboard.HotKey.parse(spec)
                     supported_hotkeys[spec] = callback
                 except Exception as e:
-                    print(f"Debug: pynput does not support hotkey spec '{spec}': {e}")
+                    debug_print(f"Debug: pynput does not support hotkey spec '{spec}': {e}", cfg=DEBUG_MODE)
 
             if supported_hotkeys:
                 print(
@@ -209,7 +213,7 @@ def start_hotkeys(callback, hotkey_str="ctrl+0"):
                     registered = True
                     break
                 except Exception as e:
-                    print(f"Debug: 'keyboard' failed to register variant '{variant}': {e}")
+                    debug_print(f"Debug: 'keyboard' failed to register variant '{variant}': {e}", cfg=DEBUG_MODE)
 
             if not registered:
                 print(

@@ -2,12 +2,16 @@ import re
 import sys
 import threading
 
+from config_manager import debug_print, is_debug_mode
+
 keyboard_lib = None
 try:
     if sys.platform.startswith("win"):
         import keyboard as keyboard_lib
 except ImportError:
     pass
+
+DEBUG_MODE = is_debug_mode()
 
 
 MODIFIER_ALIASES = {
@@ -124,7 +128,7 @@ def start_hotkeys(callback, hotkey_str="ctrl+0"):
                         registered = True
                         break
                     except Exception as e:
-                        print(f"Debug: 'keyboard' failed to register variant '{variant}': {e}")
+                        debug_print(f"Debug: 'keyboard' failed to register variant '{variant}': {e}", cfg=DEBUG_MODE)
 
                 if not registered:
                     print(f"Error: 'keyboard' could not register hotkey '{hotkey_str}' on Windows. Hotkeys disabled.")

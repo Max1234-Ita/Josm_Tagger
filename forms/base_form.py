@@ -30,13 +30,8 @@ class BaseForm(tk.Toplevel):
         self.after(200, self._reset_opening_flag)
 
     def _on_focus_in_base(self, event=None):
-        """Quando una finestra secondaria prende il focus, ripristina main_form."""
-        try:
-            toplevel = self.parent.winfo_toplevel()
-            if hasattr(toplevel, "main_form_instance"):
-                toplevel.main_form_instance._on_focus_in()
-        except:
-            pass
+        """Keep secondary forms independent from main_form focus handling."""
+        return
 
     def _reset_opening_flag(self):
         effects.is_any_form_opening = False

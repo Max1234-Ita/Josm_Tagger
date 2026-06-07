@@ -34,7 +34,7 @@ import pystray
 
 from PIL import Image
 
-from config_manager import load_config, save_config
+from config_manager import debug_print, load_config, save_config
 from codes_manager import load_codes
 from hotkeys import start_hotkeys
 if sys.platform.startswith("linux"):
@@ -176,7 +176,8 @@ class MainForm:
         self._hotkey_events = queue.Queue()
         self._linux_instance_server = None
         self._linux_shortcut_helper_path = Path.home() / "josmtagger.sh"
-        print(f"Linux pynput status: {linux_global_hotkeys_status()}")
+        if sys.platform.startswith("linux"):
+            print(f"Linux pynput status: {linux_global_hotkeys_status()}")
 
         # Keyboard shortcuts
         self.root.bind("<Control-f>", self.open_search)
@@ -1162,15 +1163,15 @@ PY
         if not sys.platform.startswith("linux"):
             return
         if LinuxInstanceServer is None:
-            print("Linux instance restore IPC unavailable.")
+            debug_print("Linux instance restore IPC unavailable.", cfg=self.config)
             return
         try:
             self._linux_instance_server = LinuxInstanceServer(
                 self._queue_hotkey_trigger
             ).start()
-            print("Linux instance restore IPC: active")
+            debug_print("Linux instance restore IPC: active", cfg=self.config)
         except Exception as e:
-            print(f"Warning: Linux instance restore IPC failed: {e}")
+            debug_print(f"Warning: Linux instance restore IPC failed: {e}", cfg=self.config)
 
     def _process_hotkey_events(self):
         if self._is_exiting:
@@ -1387,9 +1388,9 @@ PY
             else:
                 # On Linux, force "Remote Control" and skip pyautogui
                 control_method = "remote_control"
-                print("Running on Linux, forcing JOSM control method to 'Remote Control'.")
+                debug_print("Running on Linux, forcing JOSM control method to 'Remote Control'.", cfg=self.config)
 
-            print('Send Worker started')
+            debug_print('Send Worker started', cfg=self.config)
 
             # --- Normalize tags into a dict ---
             raw_tags = self.codes.get(code, {})
@@ -1418,10 +1419,15 @@ PY
                     elif stripped and all(not ch.isalnum() for ch in stripped):
                         generic_found = True
 
+            generic_warning_shown = False
+            if generic_found and control_method == "remote_control":
+                self._show_generic_tags_warning()
+                generic_warning_shown = True
+
             # --- Send tags ---
             try:
                 if not tags_list:
-                    print("WARNING: tags_list empty, nothing to send")
+                    debug_print("WARNING: tags_list empty, nothing to send", cfg=self.config)
                     self._sending_in_progress = False
                     self.allow_minimize = True
                     self.allow_fade = True
@@ -1441,7 +1447,7 @@ PY
                     self._promote_code(code)
                     self._reset_input()
 
-                    if generic_found:
+                    if generic_found and not generic_warning_shown:
                         self._show_generic_tags_warning()
 
                     if sent_ok:
@@ -1455,6 +1461,8 @@ PY
                     beh = self.config.get("behaviour", {})
                     if beh.get("on_apply") == "minimize_to_tray":
                         hide_delay = int(beh.get("hide_delay", 150))
+                        if control_method == "remote_control":
+                            hide_delay = min(hide_delay, int(beh.get("remote_control_hide_delay", 50)))
                         fade_duration = int(beh.get("fade_duration_ms", 300))
                         self.root.after(hide_delay, self._fade_then_minimize_to_tray)
                         self.root.after(hide_delay + fade_duration + 100, lambda: setattr(self, "_block_focus_out", False))
@@ -1463,7 +1471,7 @@ PY
 
                 self.root.after(0, done)
 
-        print(f"Applying code '{code}'")
+            debug_print(f"Applying code '{code}'", cfg=self.config)
         # threading.Thread(target=worker, daemon=True).start()
         worker()
         pass
@@ -1646,7 +1654,7 @@ PY
         if self._is_exiting:
             return
         if self.allow_minimize:
-            print('main_form -> Minimize to tray')
+            debug_print('main_form -> Minimize to tray', cfg=self.config)
             self._capture_current_normal_geometry()
             if not self.tray_running:
                 self._start_tray_icon()
@@ -1656,7 +1664,7 @@ PY
             self.root.withdraw()
             self._notify_first_minimize_to_tray()
         else:
-            print('Minimize prevented. allow_minimize = False')
+            debug_print('Minimize prevented. allow_minimize = False', cfg=self.config)
 
     def _resolve_appname(self):
         try:
@@ -1728,6 +1736,7 @@ PY
     def _auto_check_for_updates(self):
         if not self._should_auto_check_for_updates():
             return
+        print("Startup update check: starting")
         self._perform_update_check(interactive=False)
 
     def check_for_updates_menu(self):
@@ -1826,7 +1835,7 @@ PY
 
             self.root.after(duration, self.minimize_to_tray)
         else:
-            print('Fading prevented. allow_fade = False')
+            debug_print('Fading prevented. allow_fade = False', cfg=self.config)
 
     def _start_tray_icon(self):
         """Creates the tray icon using run_detached() from the GitHub version."""
@@ -1918,12 +1927,12 @@ PY
         now = time.time()
 
         if self._fade_in_progress:
-            print("Focus In prevented (fade running)")
+            debug_print("Focus In prevented (fade running)", cfg=self.config)
             return
 
         # Debounce: ignore events too close (< 80 ms)
         if hasattr(self, "_last_focus_in") and (now - self._last_focus_in) < 0.08:
-            print("Focus In prevented (debounced)")
+            debug_print("Focus In prevented (debounced)", cfg=self.config)
             return
 
         self._last_focus_in = now
@@ -1935,10 +1944,10 @@ PY
 
         # If we are already practically at the target, do not redo the fade
         if abs(current_alpha - target) < 0.01:
-            print("Fading", current_alpha, "->", target, "in", duration, "ms\n -> (skipped)")
+            debug_print("Fading", current_alpha, "->", target, "in", duration, "ms\n -> (skipped)", cfg=self.config)
             return
 
-        print(f"Fading {current_alpha} -> {target} in {duration} ms")
+        debug_print(f"Fading {current_alpha} -> {target} in {duration} ms", cfg=self.config)
 
         self.fader.fade(
             start_alpha=current_alpha,
@@ -1963,12 +1972,12 @@ PY
         now = time.time()
 
         if self._fade_in_progress:
-            print("Focus Out prevented (fade running)")
+            debug_print("Focus Out prevented (fade running)", cfg=self.config)
             return
 
         # Debounce: ignore events too close (< 80 ms)
         if hasattr(self, "_last_focus_out") and (now - self._last_focus_out) < 0.08:
-            print("Focus Out prevented (debounced)")
+            debug_print("Focus Out prevented (debounced)", cfg=self.config)
             return
 
         self._last_focus_out = now
@@ -1979,22 +1988,22 @@ PY
             self._has_open_secondary_windows()):
             
             if getattr(effects, "is_any_form_opening", False):
-                print("Focus Out prevented (internal form opening)")
+                debug_print("Focus Out prevented (internal form opening)", cfg=self.config)
                 # Abort fading and restore active transparency
                 self.fader.stop(reset_alpha=self.config.get("behaviour", {}).get("transparency_active", 100) / 100)
             elif self._has_open_secondary_windows():
-                print("Focus Out prevented (secondary window open)")
+                debug_print("Focus Out prevented (secondary window open)", cfg=self.config)
             else:
-                print(f"Focus Out prevented (startup/blocked, allow={self.allow_focus_out}, block={self._block_focus_out})")
+                debug_print(f"Focus Out prevented (startup/blocked, allow={self.allow_focus_out}, block={self._block_focus_out})", cfg=self.config)
             return
 
         # 2) Block during tag sending
         if self._sending_in_progress:
-            print("Focus Out prevented (sending)")
+            debug_print("Focus Out prevented (sending)", cfg=self.config)
             return
 
         if not self.allow_fade:
-            print("Focus Out prevented (fade disabled)")
+            debug_print("Focus Out prevented (fade disabled)", cfg=self.config)
             return
 
         # 3) If focus is still inside the application -> NOT a real FocusOut.
@@ -2003,19 +2012,19 @@ PY
             # focus_get() returns the widget if it is in this process
             focused_widget = self.root.focus_get()
             if focused_widget is not None:
-                print(f"Focus Out prevented (focus on widget: {focused_widget})")
+                debug_print(f"Focus Out prevented (focus on widget: {focused_widget})", cfg=self.config)
                 return
                 
             # Further check via displayof (covers special cases with Toplevel)
             focused_display = self.root.focus_displayof()
             if focused_display is not None:
-                print("Focus Out prevented (focus_displayof match)")
+                debug_print("Focus Out prevented (focus_displayof match)", cfg=self.config)
                 return
 
             # Raw check of focused widget via Tcl (covers Combobox popdown)
             raw_focus = self.root.tk.call('focus')
             if raw_focus and ('.popdown' in str(raw_focus).lower() or '.tk_choice_list' in str(raw_focus).lower()):
-                print(f"Focus Out prevented (focus on popdown: {raw_focus})")
+                debug_print(f"Focus Out prevented (focus on popdown: {raw_focus})", cfg=self.config)
                 return
         except (KeyError, tk.TclError):
             pass
@@ -2026,12 +2035,12 @@ PY
         current_alpha = float(self.root.attributes("-alpha"))
 
         if current_alpha <= target + 0.01:
-            print("Focus Out prevented (already faded)")
+            debug_print("Focus Out prevented (already faded)", cfg=self.config)
             return
 
-        print(">>> REAL FOCUS OUT DETECTED <<<")
+        debug_print(">>> REAL FOCUS OUT DETECTED <<<", cfg=self.config)
         duration = int(beh.get("fade_duration_ms", 300))
-        print(f"Fading {current_alpha} -> {target} in {duration} ms")
+        debug_print(f"Fading {current_alpha} -> {target} in {duration} ms", cfg=self.config)
 
         self.fader.fade(
             start_alpha=current_alpha,
