@@ -4,6 +4,8 @@ from tkinter import ttk
 from typing import Dict, List, Any, Optional, Tuple
 import os
 import sys
+from pathlib import Path
+from config_manager import debug_print
 from effects import get_active_theme, apply_theme_colors, apply_background_picture
 from forms.base_form import BaseForm
 
@@ -123,7 +125,10 @@ class SearchForm(BaseForm):
         """Applica l'icona alla finestra (ICO per Windows, PNG per Linux)."""
         try:
             # Risoluzione percorso base (compatibile con PyInstaller)
-            base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+            if hasattr(sys, "_MEIPASS"):
+                base_path = Path(sys._MEIPASS)
+            else:
+                base_path = Path(__file__).resolve().parent.parent
             
             if sys.platform.startswith("win"):
                 icon_path = os.path.join(base_path, "resources", "josm_tagger.ico")
@@ -135,7 +140,7 @@ class SearchForm(BaseForm):
                     img = tk.PhotoImage(file=icon_path)
                     self.iconphoto(True, img)
         except Exception as e:
-            print(f"DEBUG: Could not set icon: {e}")
+            debug_print(f"DEBUG: Could not set icon: {e}", cfg=self.config)
 
     def apply_theme(self):
         """Applica i colori del tema e l'immagine di sfondo."""
@@ -422,7 +427,7 @@ class SearchForm(BaseForm):
             if hasattr(self.mainform, "open_editor"):
                 self.mainform.open_editor(code)
         except Exception as e:
-            print(f"DEBUG: Error opening editor from search: {e}")
+            debug_print(f"DEBUG: Error opening editor from search: {e}", cfg=self.config)
 
     # ---------------- USE / CLOSE ----------------
     def _use_code(self, code: str):

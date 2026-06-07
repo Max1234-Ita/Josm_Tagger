@@ -1,48 +1,74 @@
-
 import os
 import sys
+import json
 import time
+import threading
+import queue
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 import tkinter as tk
 import tkinter.ttk as ttk
+from tkinter import messagebox
 
-import keyboard
 # ---------------------------------------------------------------------------
-# NOTE SU PYSTRAY (IMPORTANTE)
+# NOTE ON PYSTRAY (IMPORTANT)
 #
-# PyPI distribuisce solo pystray 0.19.5, che NON supporta correttamente:
+# PyPI only distributes pystray 0.19.5, which does NOT support correctly:
 # - detach=True
 # - run_detached()
-# - hotkey globale quando la finestra è nascosta
+# - global hotkey when window is hidden
 #
-# Per ottenere la versione corretta (sviluppo), installare da GitHub:
+# To get the correct version (development), install from GitHub:
 #
 #   pip uninstall pystray -y
 #   pip install git+https://github.com/moses-palmer/pystray.git
 #
-# La versione GitHub dichiara ancora "0.19.5", ma include:
+# The GitHub version still claims "0.19.5", but includes:
 # - run_detached()
-# - fix per Windows
-# - fix per hotkey
-# - fix per fading
+# - fix for Windows
+# - fix for hotkey
+# - fix for fading
 # ---------------------------------------------------------------------------
 
 import pystray
 
 from PIL import Image
 
-from config_manager import load_config, save_config
+from config_manager import debug_print, load_config, save_config
 from codes_manager import load_codes
 from hotkeys import start_hotkeys
+if sys.platform.startswith("linux"):
+    from linux_hotkeys import (
+        start_hotkeys as start_linux_hotkeys,
+        linux_global_hotkeys_status,
+        linux_hotkey_matches,
+    )
+    from linux_instance_control import INSTANCE_SOCKET_PATH, LinuxInstanceServer
+else:
+    start_linux_hotkeys = None
+    LinuxInstanceServer = None
+    INSTANCE_SOCKET_PATH = None
+
+    def linux_global_hotkeys_status():
+        return "n/a"
+
+    def linux_hotkey_matches(event=None, spec="ctrl+0"):
+        return False
 import effects
 from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
-from josm_interface import send_tags
+from josm_interface import send_tags, focus_josm
+from update_checker import check_for_updates # Re-added import
+from url_launcher import open_url_in_default_browser # Re-added import
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
 from forms.search_form import SearchForm
 
 
 def resource_path(relative_path):
-    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    if hasattr(sys, "_MEIPASS"):
+        base_path = Path(sys._MEIPASS)
+    else:
+        base_path = Path(__file__).resolve().parent.parent
     return os.path.join(base_path, relative_path)
 
 
@@ -130,11 +156,11 @@ class MainForm:
         self.root.bind("<Configure>", self._prevent_maximize)
         self.root.bind("<Configure>", self._on_main_configure, add="+")
 
-        # X → minimizza nella tray
+        # X → minimize to tray
         self.root.protocol("WM_DELETE_WINDOW", self._on_main_window_close)
 
         # --- WINDOW FADING ---
-        # Semafori per controllare quando è permesso reagire al focus-out e quando no.
+        # Semaphores to control when it is allowed to react to focus-out and when not.
         self.allow_minimize = True
         self.allow_fade = True
         self._fade_in_progress = False
@@ -146,28 +172,34 @@ class MainForm:
 
         # Track send() state
         self._sending_in_progress = False
+        self._update_check_in_progress = False
+        self._hotkey_events = queue.Queue()
+        self._linux_instance_server = None
+        self._linux_shortcut_helper_path = Path.home() / "josmtagger.sh"
+        if sys.platform.startswith("linux"):
+            print(f"Linux pynput status: {linux_global_hotkeys_status()}")
 
         # Keyboard shortcuts
         self.root.bind("<Control-f>", self.open_search)
         self.root.bind("<Control-F>", self.open_search)
         self.root.bind("<Alt-F4>", lambda e: self._exit_app())
 
-        # --- ISOLATE FOCUS EVENTS (fix doppio FocusIn/Out) ---
-        # Rimuove i binding di classe Toplevel e 'all' per FocusIn/Out
+        # --- ISOLATE FOCUS EVENTS (fix double FocusIn/Out) ---
+        # Removes class Toplevel and 'all' bindings for FocusIn/Out
         tags = list(self.root.bindtags())
-        # tags tipici: ('.!toplevel', 'Toplevel', 'all')
+        # typical tags: ('.!toplevel', 'Toplevel', 'all')
 
-        # Creiamo un gruppo dedicato SOLO ai nostri eventi
+        # Create a dedicated group ONLY for our events
         if "FocusGroup" not in tags:
-            tags.insert(1, "FocusGroup")  # subito dopo il widget stesso
+            tags.insert(1, "FocusGroup")  # right after the widget itself
 
-        # Rimuoviamo Toplevel per evitare doppi eventi
+        # Remove Toplevel to avoid double events
         if "Toplevel" in tags:
             tags.remove("Toplevel")
 
         self.root.bindtags(tuple(tags))
 
-        # Assicuriamo che SOLO FocusGroup riceva gli eventi
+        # Ensure that ONLY FocusGroup receives the events
         self.root.bind_class("FocusGroup", "<FocusIn>", self._on_focus_in)
         self.root.bind_class("FocusGroup", "<FocusOut>", self._on_focus_out)
 
@@ -207,16 +239,20 @@ class MainForm:
         self.build_ui()
         self._init_command_history()
         self.register_hotkey()
+        self.root.after(100, self._process_hotkey_events)
         self.apply_font()
         self.apply_theme()
         self.update_list()
+        self._start_linux_instance_server()
+        self.root.after(800, self._ensure_linux_shortcut_helper)
         self._start_tray_icon()
+        self.root.after(2000, self._auto_check_for_updates)
 
         # Tooltip
         self._list_tooltip_window = None
         self._list_tooltip_last_index = None
 
-        # Dropdown iniziale: solo codici disponibili (ordinati)
+        # Dropdown initial: only available codes (sorted)
         self.entry["values"] = sorted(self.codes.keys())
 
         # Restore panes layout after Tk has stabilized geometry
@@ -252,22 +288,18 @@ class MainForm:
         w = self.root.winfo_width()
         h = self.root.winfo_height()
 
-        cfg = load_config()
-        if not cfg:
-            cfg = dict(self.config)
+        if "geometry" not in self.config:
+            self.config["geometry"] = {}
 
-        if "geometry" not in cfg:
-            cfg["geometry"] = {}
-
-        cfg["geometry"]["main_form"] = {
+        self.config["geometry"]["main_form"] = {
             "x": x,
             "y": y,
             "w": w,
             "h": h
         }
 
-        self.config = cfg
-        save_config(self.config)
+        with open("config.json", "w", encoding="utf-8") as f:
+            json.dump(self.config, f, indent=2)
 
     def _capture_current_normal_geometry(self):
         try:
@@ -302,37 +334,26 @@ class MainForm:
         if not self._last_normal_geometry:
             return
 
-        cfg = load_config()
-        if not cfg:
-            cfg = dict(self.config)
-
-        cfg.setdefault("geometry", {})
-        current = cfg["geometry"].get("main_form", {})
+        self.config.setdefault("geometry", {})
+        current = self.config["geometry"].get("main_form", {})
         if current != self._last_normal_geometry:
-            cfg["geometry"]["main_form"] = dict(self._last_normal_geometry)
-            self.config = cfg
+            self.config["geometry"]["main_form"] = dict(self._last_normal_geometry)
             save_config(self.config)
-        else:
-            self.config = cfg
 
     def save_config(self):
         """
         Save preview panel state and pane heights.
         """
-        cfg = load_config()
-        if not cfg:
-            cfg = dict(self.config)
+        self.config["preview_expanded"] = self.preview_expanded
+        self.config["preview_height"] = self.preview_height
+        self.config["upper_height"] = self.upper_height
 
-        cfg["preview_expanded"] = self.preview_expanded
-        cfg["preview_height"] = self.preview_height
-        cfg["upper_height"] = self.upper_height
-
-        self.config = cfg
-        save_config(self.config)
+        with open("config.json", "w", encoding="utf-8") as f:
+            json.dump(self.config, f, indent=2)
 
     # ---------------- MENU ----------------
     def build_menu(self):
-        """Crea una barra dei menu personalizzata con logica dropdown non bloccante."""
+        """Creates a custom menu bar with non-blocking dropdown logic."""
         self.menubar_frame = tk.Frame(self.root, bd=0, relief="flat", height=28)
         self.menubar_frame.pack(side="top", fill="x")
         
@@ -374,7 +395,7 @@ class MainForm:
         ))
         # 2. EDIT
         create_menu_item("Edit", lambda m: (
-            m.add_command("Tags & Codes", self.open_editor),
+            m.add_command("Tag groups", self.open_editor),
             m.add_command("Search", self.open_search, "Ctrl+F"),
             m.add_separator(),
             m.add_command("Preferences", self.open_preferences)
@@ -385,27 +406,37 @@ class MainForm:
             m.add_separator(),
             m.add_command("Minimize to tray", self.minimize_to_tray)
         ))
-        # 4. ABOUT
-        create_menu_item("   ?   ", lambda m: m.add_command("About", self.show_about))
+        # 4. ABOUT / HELP
+        def setup_help_menu(m):
+            m.add_command("Help", self.open_help)
+            m.add_separator()
+            if sys.platform.startswith("linux"):
+                m.add_command("Linux shortcut helper", self._show_linux_shortcut_helper_message)
+                m.add_separator()
+            m.add_command("Check for updates", self.check_for_updates_menu)
+            m.add_separator()
+            m.add_command("About", self.show_about)
 
-        # Reset se clicco fuori (solo se NON è un widget del menu)
+        create_menu_item("   ?   ", setup_help_menu)
+
+        # Reset if I click outside (only if NOT a menu widget)
         self.root.bind("<Button-1>", self._check_menu_click_outside, add="+")
 
     def _on_menu_leave(self):
-        """Avvia il timer per la chiusura, ma solo se non siamo già in un'area protetta."""
+        """Starts the timer for closing, but only if we are not already in a protected area."""
         if self._active_dropdown:
             if self._close_job: self.root.after_cancel(self._close_job)
-            # Aumentiamo leggermente il tempo per dare margine di movimento
+            # Increase the time slightly to give room for movement
             self._close_job = self.root.after(500, self._close_dropdown)
 
     def _cancel_close(self, e=None):
-        """Annulla qualsiasi operazione di chiusura pendente."""
+        """Cancel any pending close operation."""
         if self._close_job:
             self.root.after_cancel(self._close_job)
             self._close_job = None
 
     def _toggle_menu(self, btn):
-        self._cancel_close() # Protezione immediata
+        self._cancel_close() # Immediate protection
         if self._active_button == btn:
             self._close_dropdown()
             self._menu_active = False
@@ -415,29 +446,29 @@ class MainForm:
 
     def _on_menu_hover(self, btn):
         if self._menu_active:
-            self._cancel_close() # Impedisce la chiusura durante il passaggio tra pulsanti
+            self._cancel_close() # Prevents closing while moving between buttons
             self._show_dropdown(btn)
 
     def _show_dropdown(self, btn):
-        # Se il menu per questo pulsante è già attivo, basta annullare la chiusura
-        if self._active_button == btn and self._active_dropdown: 
+        # If the menu for this button is already active, just cancel the close
+        if self._active_button == btn and self._active_dropdown:
             self._cancel_close()
             return
             
         self._close_dropdown()
         self._active_button = btn
         
-        # Crea finestra dropdown
+        # Create dropdown window
         top = tk.Toplevel(self.root)
         top.overrideredirect(True)
         top.attributes("-topmost", True)
         self._active_dropdown = top
         
-        # Il menu stesso deve annullare la chiusura quando il mouse ci entra
+        # The menu itself must cancel the close when the mouse enters it
         top.bind("<Enter>", self._cancel_close)
         top.bind("<Leave>", lambda e: self._on_menu_leave())
 
-        # Colori e Font
+        # Colors and Font
         theme = get_active_theme(self.config)
         p_bg = theme.get("panel")
         p_fg = theme.get("panel_fg")
@@ -446,7 +477,7 @@ class MainForm:
         inner = tk.Frame(top, bg=p_bg, highlightthickness=1, highlightbackground=theme.get("fg"))
         inner.pack(fill="both", expand=True)
         
-        # Binding ricorsivo per annullare la chiusura su ogni parte del menu
+        # Recursive binding to cancel close on every part of the menu
         inner.bind("<Enter>", self._cancel_close)
 
         items = self._menu_data[btn]
@@ -462,18 +493,18 @@ class MainForm:
                          padx=20, pady=6, anchor="w", cursor="hand2")
             l.pack(fill="x")
             
-            # Ogni riga annulla attivamente il timer di chiusura
+            # Each row actively cancels the close timer
             l.bind("<Enter>", lambda e, w=l: (self._cancel_close(), w.configure(bg="#0078d7", fg="white")))
             l.bind("<Leave>", lambda e, w=l: w.configure(bg=p_bg, fg=p_fg))
             l.bind("<Button-1>", lambda e, cmd=item["command"]: self._exec_menu_cmd(cmd))
 
-        # Posizionamento: SOVRAPPOSIZIONE di 2px per eliminare zone morte
+        # Positioning: OVERLAP of 2px to eliminate dead zones
         self.root.update_idletasks()
         x = btn.winfo_rootx()
         y = btn.winfo_rooty() + btn.winfo_height() - 2
         top.geometry(f"+{x}+{y}")
         
-        # Protezione finale: dopo aver mostrato, annulliamo ancora una volta eventuali timer spuri
+        # Final protection: after showing, cancel any spurious timers again
         self.root.after(10, self._cancel_close)
 
     def _exec_menu_cmd(self, cmd):
@@ -495,19 +526,19 @@ class MainForm:
     def _check_menu_click_outside(self, event):
         if not self._menu_active: return
         
-        # Se clicco sulla barra dei menu o sul dropdown, NON chiudere
+        # If I click on the menu bar or the dropdown, DO NOT close
         w = event.widget
         if w in self.menu_buttons or w == self.menubar_frame:
             return
             
-        # Verifica se il widget cliccato è all'interno del dropdown attivo
+        # Check if the clicked widget is inside the active dropdown
         if self._active_dropdown:
             try:
                 if str(w).startswith(str(self._active_dropdown)):
                     return
             except: pass
 
-        # Se siamo qui, il clic è veramente "fuori"
+        # If we are here, the click is truly "outside"
         self._close_dropdown()
         self._menu_active = False
 
@@ -525,7 +556,7 @@ class MainForm:
         self.entry = ttk.Combobox(top, textvariable=self.code_var, width=10)
         self.entry.pack(fill="x", expand=True, side="left", padx=(4, 4))
         
-        # Impedisce il fading all'apertura della tendina
+        # Prevents fading when opening the dropdown
         self.entry.bind("<Button-1>", lambda e: setattr(effects, "fade_away", False))
         self.entry.bind("<<ComboboxSelected>>", lambda e: self.root.after(100, self._restore_fade_away))
 
@@ -789,12 +820,11 @@ class MainForm:
         except:
             pass
 
-        # Adjust window height to upper + preview
+        # Adjust window height to match saved layout
         w = self.root.winfo_width()
         total_h = self.upper_height + self.preview_height
         self.root.geometry(f"{w}x{total_h}")
 
-        # Update preview_height from actual widget height
         self.root.update_idletasks()
         try:
             self.preview_height = max(160, self.preview_frame.winfo_height())
@@ -881,6 +911,30 @@ class MainForm:
         AboutForm(self.root, self.config)
         self.root.after(1500, self._restore_fade_away)
 
+    def open_help(self):
+        """Open the user guide markdown file in the default browser."""
+        effects.fade_away = False
+        try:
+            from pathlib import Path
+            import subprocess
+            
+            help_file = resource_path("resources/doc/josm_tagger.md")
+            file_url = Path(help_file).as_uri()
+            
+            # Try to open with Firefox explicitly on all platforms
+            try:
+                if sys.platform.startswith("win"):
+                    subprocess.Popen(["firefox", file_url])
+                else:  # Linux/Mac
+                    subprocess.Popen(["firefox", file_url])
+            except FileNotFoundError:
+                # Firefox not found, fallback to default browser
+                open_url_in_default_browser(file_url)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open help file:\n{e}", parent=self.root)
+        finally:
+            self.root.after(1500, self._restore_fade_away)
+
     def context_use(self):
         self.apply_from_list()
 
@@ -912,17 +966,17 @@ class MainForm:
 
     # ---------------- THEME ----------------
     def apply_theme(self):
-        """Applica il tema attivo ai widget Tk compatibili."""
+        """Apply the active theme to compatible Tk widgets."""
         apply_theme_colors(self.root, self.config)
         
-        # Correzioni extra per widget che richiedono parametri specifici (panel_fg)
+        # Extra fixes for widgets that require specific parameters (panel_fg)
         theme = get_active_theme(self.config)
         panel_color = theme.get("panel")
         panel_fg = theme.get("panel_fg")
         bg_color = theme.get("bg")
         fg_color = theme.get("fg")
         
-        # Stile TTK per Combobox
+        # TTK style for Combobox
         style = ttk.Style(self.root)
         if "clam" in style.theme_names():
             style.theme_use("clam")
@@ -938,7 +992,7 @@ class MainForm:
         self.root.option_add("*TCombobox*Listbox.foreground", panel_fg)
         self.root.option_add("*TCombobox*Listbox.selectBackground", "#0078d7")
         
-        # Tematizzazione barra menu personalizzata
+        # Custom menu bar theming
         if hasattr(self, "menubar_frame"):
             self.menubar_frame.configure(bg=bg_color)
         
@@ -955,7 +1009,7 @@ class MainForm:
                 try:
                     menu.configure(bg=panel_color, fg=panel_fg, 
                                    activebackground="#0078d7", activeforeground="white")
-                    # Tenta di forzare il colore sui singoli elementi
+                    # Try to force color on individual elements
                     for i in range(menu.index("end") + 1):
                         try:
                             menu.entryconfigure(i, background=panel_color, foreground=panel_fg)
@@ -980,7 +1034,7 @@ class MainForm:
                     pass
                     
             for child in widget.winfo_children():
-                # Evitiamo di ricolorare i menu qui, l'abbiamo fatto sopra in modo specifico
+                # Avoid recoloring menus here, we did it specifically above
                 if not isinstance(child, tk.Menu):
                     apply_extra(child)
         
@@ -1016,32 +1070,161 @@ class MainForm:
 
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
-        hotkey_str = self.config.get("hotkey", "ctrl+num 0")
-        start_hotkeys(lambda: self.root.after(0, self.hotkey_trigger), hotkey_str)
+        hotkey_str = self.config.get("hotkey", "ctrl+0")
+        self._linux_hotkey_spec = hotkey_str
+
+        if sys.platform.startswith("linux"):
+            start_linux_hotkeys(self._queue_hotkey_trigger, hotkey_str)
+            print(f"Hotkey registration requested (Linux): {hotkey_str}")
+            return
+
+        start_hotkeys(self._queue_hotkey_trigger, hotkey_str)
         print(f"Hotkey registration requested: {hotkey_str}")
 
-    def hotkey_trigger(self):
-        self.focus_input()
+    def _queue_hotkey_trigger(self):
+        try:
+            self._hotkey_events.put_nowait(True)
+        except Exception:
+            pass
 
-    def focus_input(self):
-        if self.tray_running:
-            # se è in tray, ripristina
+    def _linux_shortcut_helper_content(self):
+        socket_path = str(INSTANCE_SOCKET_PATH or (Path.home() / ".josm_tagger_socket"))
+        return f"""#!/bin/sh
+set -eu
+
+SOCKET_PATH="{socket_path}"
+
+if [ ! -S "$SOCKET_PATH" ]; then
+  exit 1
+fi
+
+python3 - "$SOCKET_PATH" <<'PY'
+import socket
+import sys
+
+sock_path = sys.argv[1]
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.settimeout(0.25)
+sock.connect(sock_path)
+sock.sendall(b"RESTORE\\n")
+try:
+    sock.shutdown(socket.SHUT_WR)
+except OSError:
+    pass
+sock.close()
+PY
+"""
+
+    def _ensure_linux_shortcut_helper(self):
+        if not sys.platform.startswith("linux"):
+            return
+
+        helper_path = self._linux_shortcut_helper_path
+        helper_content = self._linux_shortcut_helper_content()
+        needs_message = False
+
+        try:
+            current = helper_path.read_text(encoding="utf-8") if helper_path.exists() else None
+            if current != helper_content:
+                helper_path.write_text(helper_content, encoding="utf-8")
+                needs_message = True
+            helper_path.chmod(0o755)
+        except Exception as e:
+            print(f"Warning: could not create Linux shortcut helper {helper_path}: {e}")
+            return
+
+        updates_cfg = self.config.setdefault("linux", {})
+        if not updates_cfg.get("shortcut_helper_notice_shown"):
+            needs_message = True
+            updates_cfg["shortcut_helper_notice_shown"] = True
+            save_config(self.config)
+
+        if needs_message:
+            self.root.after(200, self._show_linux_shortcut_helper_message)
+
+    def _show_linux_shortcut_helper_message(self):
+        helper_path = self._linux_shortcut_helper_path
+        messagebox.showinfo(
+            "Linux shortcut helper",
+            (
+                "JOSM Tagger ha creato un helper per il richiamo rapido:\n\n"
+                f"  {helper_path}\n\n"
+                "Configura la scorciatoia di sistema per eseguire quel file.\n"
+                "Flusso consigliato:\n"
+                "1. Avvia JOSM Tagger una volta con il launcher normale.\n"
+                "2. Associa la scorciatoia di sistema a ~/josmtagger.sh.\n"
+                "3. Da quel momento la scorciatoia riattiva l'istanza già aperta\n"
+                "   e non crea una nuova istanza."
+            ),
+            parent=self.root,
+        )
+
+    def _start_linux_instance_server(self):
+        if not sys.platform.startswith("linux"):
+            return
+        if LinuxInstanceServer is None:
+            debug_print("Linux instance restore IPC unavailable.", cfg=self.config)
+            return
+        try:
+            self._linux_instance_server = LinuxInstanceServer(
+                self._queue_hotkey_trigger
+            ).start()
+            debug_print("Linux instance restore IPC: active", cfg=self.config)
+        except Exception as e:
+            debug_print(f"Warning: Linux instance restore IPC failed: {e}", cfg=self.config)
+
+    def _process_hotkey_events(self):
+        if self._is_exiting:
+            return
+
+        triggered = False
+        while True:
+            try:
+                self._hotkey_events.get_nowait()
+                triggered = True
+            except queue.Empty:
+                break
+
+        if triggered:
+            self.hotkey_trigger()
+
+        self.root.after(100, self._process_hotkey_events)
+
+    def hotkey_trigger(self):
+        self.restore_main_form()
+
+    def restore_main_form(self):
+        if self.tray_running or str(self.root.state()) in ("withdrawn", "iconic"):
             self._on_tray_restore()
             return
 
         self.root.deiconify()
+        self.root.update_idletasks()
         self.root.lift()
         self.root.attributes("-topmost", True)
+        self.root.after(25, lambda: self.root.attributes("-topmost", False))
         self.root.after(10, self._force_focus)
-        self.root.after(50, self._force_focus)
+        self.root.after(60, self._force_focus)
         self.flash_window()
+
+    def focus_input(self):
+        self.restore_main_form()
+
+    def _activate_entry_for_next_command(self):
+        """Put focus back on the command textbox and prepare it for typing."""
+        try:
+            if self.entry is None or not self.entry.winfo_exists():
+                return
+            self.entry.focus_set()
+            self.entry.icursor(tk.END)
+            self.entry.select_range(0, tk.END)
+        except Exception:
+            pass
 
     def _force_focus(self):
         try:
             self.root.focus_force()
-            self.entry.focus_set()
-            self.entry.icursor(tk.END)
-            self.entry.select_range(0, tk.END)
+            self._activate_entry_for_next_command()
         except:
             pass
 
@@ -1079,7 +1262,7 @@ class MainForm:
         for c in self.filtered_codes:
             self.code_list.insert(tk.END, c)
 
-        # Dropdown combobox: suggerimenti live startswith (no MRU)
+        # Dropdown combobox: live suggestions startswith (no MRU)
         if text:
             self.entry["values"] = self.filtered_codes
         else:
@@ -1122,8 +1305,8 @@ class MainForm:
 
     def apply_code(self, event=None):
         """Apply the typed code or the selected one."""
-        self.allow_minimize = False  # blocca minimize durante l'invio
-        self.allow_fade = False  # blocca fade durante l'invio
+        self.allow_minimize = False  # block minimize during sending
+        self.allow_fade = False  # block fade during sending
 
         typed = self.code_var.get().strip().lower()
 
@@ -1139,7 +1322,7 @@ class MainForm:
             self.send(code)
             return
 
-        # Case 3: invalid → ripristina i flag
+        # Case 3: invalid → restore flags
         self.allow_minimize = True
         self.allow_fade = True
 
@@ -1153,17 +1336,61 @@ class MainForm:
     def clear_input(self, event=None):
         self._reset_input()
 
+    def _show_generic_tags_warning(self):
+        from tkinter import messagebox
+
+        previous_topmost = None
+        try:
+            previous_topmost = bool(self.root.attributes("-topmost"))
+        except Exception:
+            previous_topmost = None
+
+        try:
+            self.root.deiconify()
+        except Exception:
+            pass
+
+        try:
+            self.root.attributes("-topmost", True)
+            self.root.lift()
+            self.root.update_idletasks()
+        except Exception:
+            pass
+
+        try:
+            messagebox.showwarning(
+                "Warning",
+                "Tags with generic values were added. "
+                "Please review the edited element manually before uploading.",
+                parent=self.root,
+            )
+        finally:
+            if previous_topmost is not None:
+                try:
+                    self.root.attributes("-topmost", previous_topmost)
+                except Exception:
+                    pass
+
     def send(self, code):
 
         self._sending_in_progress = True
         self._block_focus_out = True
         self._render_preview(code)
+        sent_ok = False
 
         def worker():
-            # import pyautogui
-            # pyautogui.FAILSAFE = False
+            nonlocal sent_ok
+            # Conditional import of pyautogui for Windows only
+            if sys.platform.startswith("win"):
+                import pyautogui
+                pyautogui.FAILSAFE = False
+                control_method = self.config.get("josm_control_method")
+            else:
+                # On Linux, force "Remote Control" and skip pyautogui
+                control_method = "remote_control"
+                debug_print("Running on Linux, forcing JOSM control method to 'Remote Control'.", cfg=self.config)
 
-            print('Send Worker started')
+            debug_print('Send Worker started', cfg=self.config)
 
             # --- Normalize tags into a dict ---
             raw_tags = self.codes.get(code, {})
@@ -1192,47 +1419,50 @@ class MainForm:
                     elif stripped and all(not ch.isalnum() for ch in stripped):
                         generic_found = True
 
+            generic_warning_shown = False
+            if generic_found and control_method == "remote_control":
+                self._show_generic_tags_warning()
+                generic_warning_shown = True
+
             # --- Send tags ---
             try:
                 if not tags_list:
-                    print("WARNING: tags_list vuota, niente da inviare")
+                    debug_print("WARNING: tags_list empty, nothing to send", cfg=self.config)
                     self._sending_in_progress = False
                     self.allow_minimize = True
                     self.allow_fade = True
                     self._block_focus_out = False
                     return
 
-                send_tags(tags_list, main_root=self.root)
+                sent_ok = send_tags(
+                    tags_list,
+                    main_root=self.root,
+                    control_method=control_method, # Use the determined control_method
+                )
 
             finally:
 
-                # QUI: done() vede generic_found e tags_list perché è nello stesso scope
+                # HERE: done() sees generic_found and tags_list because it's in the same scope
                 def done():
                     self._promote_code(code)
                     self._reset_input()
 
-                    if generic_found:
-                        from tkinter import messagebox
-                        messagebox.showwarning(
-                            "Warning",
-                            "Tags with generic values were added. "
-                            "Please review the edited element manually before uploading."
-                        )
+                    if generic_found and not generic_warning_shown:
+                        self._show_generic_tags_warning()
+
+                    if sent_ok:
+                        focus_josm(main_root=self.root)
 
                     self._sending_in_progress = False
                     self.allow_minimize = True
                     self.allow_fade = True
 
-                    # Minimizza SOLO dopo che send ha finito
-                    try:
-                        self.config = load_config() or self.config
-                    except Exception:
-                        pass
-
+                    # Minimize ONLY after send is done
                     beh = self.config.get("behaviour", {})
-                    print(f"Apply action: {beh.get('on_apply', 'keep_visible')}")
                     if beh.get("on_apply") == "minimize_to_tray":
                         hide_delay = int(beh.get("hide_delay", 150))
+                        if control_method == "remote_control":
+                            hide_delay = min(hide_delay, int(beh.get("remote_control_hide_delay", 50)))
                         fade_duration = int(beh.get("fade_duration_ms", 300))
                         self.root.after(hide_delay, self._fade_then_minimize_to_tray)
                         self.root.after(hide_delay + fade_duration + 100, lambda: setattr(self, "_block_focus_out", False))
@@ -1241,13 +1471,13 @@ class MainForm:
 
                 self.root.after(0, done)
 
-        print(f"Applying code '{code}'")
+            debug_print(f"Applying code '{code}'", cfg=self.config)
         # threading.Thread(target=worker, daemon=True).start()
         worker()
         pass
 
     def _render_preview(self, code):
-        """Renderizza la preview dei tag per un dato codice."""
+        """Render the tag preview for a given code."""
         self.preview.delete(0, tk.END)
 
         tags = self.codes.get(code, [])
@@ -1287,13 +1517,7 @@ class MainForm:
         self.command_history = [c for c in self.command_history if c != code]
         self.command_history.insert(0, code)
         self.command_history = self.command_history[: self._get_history_limit()]
-
-        cfg = load_config()
-        if not cfg:
-            cfg = dict(self.config)
-
-        cfg["command_history"] = list(self.command_history)
-        self.config = cfg
+        self.config["command_history"] = list(self.command_history)
         save_config(self.config)
 
     def show_history_menu(self, event):
@@ -1317,7 +1541,7 @@ class MainForm:
         try:
             self.history_menu.tk_popup(event.x_root, event.y_root)
         finally:
-            self.history_menu.grab_release()
+            self.context_menu.grab_release()
 
     def show_history_menu_keyboard(self, _event=None):
         self.entry.update_idletasks()
@@ -1350,6 +1574,10 @@ class MainForm:
         return self.show_history_menu_keyboard(event)
 
     def _on_global_keypress(self, event=None):
+        if sys.platform.startswith("linux") and linux_hotkey_matches(event, getattr(self, "_linux_hotkey_spec", "ctrl+0")):
+            self._queue_hotkey_trigger()
+            return "break"
+
         if not self._focus_is_on_code_combobox():
             return None
         keysym = str(getattr(event, "keysym", "") or "")
@@ -1422,21 +1650,21 @@ class MainForm:
     # SYSTEM TRAY SUPPORT (pystray)
     # ---------------------------------------------------------
     def minimize_to_tray(self):
-        """Nasconde la finestra e avvia la tray usando pystray."""
+        """Hides the window and starts the tray using pystray."""
         if self._is_exiting:
             return
         if self.allow_minimize:
-            print('main_form -> Minimize to tray')
+            debug_print('main_form -> Minimize to tray', cfg=self.config)
             self._capture_current_normal_geometry()
             if not self.tray_running:
                 self._start_tray_icon()
 
-            # Disattiviamo il fading SOLO qui (pystray crasha se alpha cambia)
+            # Disable fading ONLY here (pystray crashes if alpha changes)
             self.root.attributes("-alpha", 1.0)
             self.root.withdraw()
             self._notify_first_minimize_to_tray()
         else:
-            print('Minimize prevented. allow_minimize = False')
+            debug_print('Minimize prevented. allow_minimize = False', cfg=self.config)
 
     def _resolve_appname(self):
         try:
@@ -1465,15 +1693,124 @@ class MainForm:
         except Exception:
             pass
 
-    def _on_main_window_close(self):
+    def _resolve_appversion(self):
         try:
-            self.config = load_config() or self.config
+            main_mod = sys.modules.get("__main__")
+            if main_mod is not None and hasattr(main_mod, "appversion"):
+                return str(getattr(main_mod, "appversion"))
         except Exception:
             pass
+        try:
+            from main import appversion as appversion_from_main
+            return str(appversion_from_main)
+        except Exception:
+            pass
+        return "0.0.0"
 
+    def _should_auto_check_for_updates(self):
+        updates_cfg = self.config.setdefault("updates", {})
+        updates_cfg.setdefault("auto_check", True)
+        if not updates_cfg.get("auto_check", True):
+            return False
+
+        raw_last_check = updates_cfg.get("last_check_utc")
+        if not raw_last_check:
+            return True
+
+        try:
+            last_check = datetime.fromisoformat(raw_last_check)
+        except Exception:
+            return True
+
+        now_utc = datetime.now(timezone.utc)
+        if last_check.tzinfo is None:
+            last_check = last_check.replace(tzinfo=timezone.utc)
+
+        return (now_utc - last_check) >= timedelta(hours=24)
+
+    def _mark_update_check_now(self):
+        updates_cfg = self.config.setdefault("updates", {})
+        updates_cfg["last_check_utc"] = datetime.now(timezone.utc).isoformat()
+        save_config(self.config)
+
+    def _auto_check_for_updates(self):
+        if not self._should_auto_check_for_updates():
+            return
+        print("Startup update check: starting")
+        self._perform_update_check(interactive=False)
+
+    def check_for_updates_menu(self):
+        self._perform_update_check(interactive=True)
+
+    def _perform_update_check(self, interactive):
+        if self._update_check_in_progress:
+            return
+
+        self._update_check_in_progress = True
+        self._mark_update_check_now()
+        current_version = self._resolve_appversion()
+
+        def worker():
+            result = check_for_updates(current_version)
+
+            def finish():
+                self._update_check_in_progress = False
+                status = result.get("status")
+
+                if status == "error":
+                    if interactive:
+                        messagebox.showwarning(
+                            "Update check failed",
+                            "Could not contact GitHub to check for updates.\n\n"
+                            f"Details: {result.get('message', 'Unknown error')}",
+                            parent=self.root,
+                        )
+                    return
+
+                if status == "no_published_versions":
+                    if interactive:
+                        messagebox.showinfo(
+                            "No published updates",
+                            "No GitHub releases or tags are currently published for this repository.\n\n"
+                            "Publish a release or a version tag to enable update detection.",
+                            parent=self.root,
+                        )
+                    return
+
+                if status == "up_to_date":
+                    if interactive:
+                        messagebox.showinfo(
+                            "Up to date",
+                            f"You are already using the latest published version ({result.get('latest_version')}).",
+                            parent=self.root,
+                        )
+                    return
+
+                if status == "update_available":
+                    latest_version = result.get("latest_version", "")
+                    source = result.get("source", "release")
+                    prompt = (
+                        f"A newer version is available on GitHub.\n\n"
+                        f"Installed: {current_version}\n"
+                        f"Available: {latest_version}\n"
+                        f"Source: {source}\n\n"
+                        f"Open the download page now?"
+                    )
+                    should_open = messagebox.askyesno(
+                        "Update available",
+                        prompt,
+                        parent=self.root,
+                    )
+                    if should_open:
+                        open_url_in_default_browser(result.get("url"))
+
+            self.root.after(0, finish)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_main_window_close(self):
         beh = self.config.get("behaviour", {})
         action = beh.get("on_close", "minimize_to_tray")
-        print(f"Main window close action: {action}")
         if action == "exit_app":
             self._exit_app()
             return
@@ -1481,7 +1818,7 @@ class MainForm:
 
     def _fade_then_minimize_to_tray(self):
         if self.allow_fade:
-            """Esegue prima il fade-out e solo dopo nasconde la finestra nella tray."""
+            """Performs fade-out first and only then hides the window in tray."""
             self._block_focus_out = True
 
             beh = self.config.get("behaviour", {})
@@ -1498,10 +1835,10 @@ class MainForm:
 
             self.root.after(duration, self.minimize_to_tray)
         else:
-            print('Fading prevented. allow_fade = False')
+            debug_print('Fading prevented. allow_fade = False', cfg=self.config)
 
     def _start_tray_icon(self):
-        """Crea la tray icon usando run_detached() della versione GitHub."""
+        """Creates the tray icon using run_detached() from the GitHub version."""
         if self.tray_running:
             return
 
@@ -1540,53 +1877,62 @@ class MainForm:
         self.tray_icon.run_detached()
 
     def _on_tray_restore(self, icon=None, item=None):
-        # Blocca focus-out durante tutto il restore
+        # Block focus-out during entire restore
         self._block_focus_out = True
 
         self.root.deiconify()
+        self.root.update_idletasks()
         self.root.lift()
         self.root.attributes("-topmost", True)
         self.root.after(50, lambda: self.root.attributes("-topmost", False))
 
-        # Fade-in
+        # Immediate focus: the user must be able to type even during fade-in.
+        self.root.after(10, self._force_focus)
+        self.root.after(30, self._force_focus)
+        self.root.after(120, self._force_focus)
+
+        # Non-blocking fade-in
         try:
-            for alpha in range(0, 101, 10):
-                self.root.attributes("-alpha", alpha / 100)
-                self.root.update_idletasks()
-                self.root.after(10)
-        except:
+            beh = self.config.get("behaviour", {})
+            target = beh.get("transparency_active", 100) / 100
+            duration = int(beh.get("fade_duration_ms", 300))
+            current_alpha = float(self.root.attributes("-alpha"))
+
+            if current_alpha < target - 0.01:
+                self.fader.fade(
+                    start_alpha=current_alpha,
+                    end_alpha=target,
+                    duration_ms=duration
+                )
+            else:
+                self.root.attributes("-alpha", target)
+        except Exception:
             self.root.attributes("-alpha", 1)
 
-        # Forza focus DOPO il fade-in
-        self.root.after(200, self._force_focus_on_entry)
-
-        # Sblocca focus-out quando la finestra è stabile
+        # Unblock focus-out when window is stable
         self.root.after(500, lambda: setattr(self, "_block_focus_out", False))
 
     def _on_tray_exit(self, icon, item):
         self.root.after(0, self._exit_app)
 
     def _force_focus_on_entry(self):
-        """Forza il focus sulla textbox dopo il restore."""
-        try:
-            self.entry.focus_force()
-            self.entry.icursor("end")
-        except:
-            pass
+        """Force focus on the textbox after restore."""
+        self._force_focus()
 
     def _on_focus_in(self, event=None):
-        """Fade-in solo quando necessario, con debounce."""
+        """Fade-in only when necessary, with debounce."""
         effects.fade_away = True
+        self.root.after_idle(self._activate_entry_for_next_command)
 
         now = time.time()
 
         if self._fade_in_progress:
-            print("Focus In prevented (fade running)")
+            debug_print("Focus In prevented (fade running)", cfg=self.config)
             return
 
-        # Debounce: ignora eventi troppo ravvicinati (< 80 ms)
+        # Debounce: ignore events too close (< 80 ms)
         if hasattr(self, "_last_focus_in") and (now - self._last_focus_in) < 0.08:
-            print("Focus In prevented (debounced)")
+            debug_print("Focus In prevented (debounced)", cfg=self.config)
             return
 
         self._last_focus_in = now
@@ -1596,12 +1942,12 @@ class MainForm:
         current_alpha = float(self.root.attributes("-alpha"))
         duration = int(beh.get("fade_duration_ms", 300))
 
-        # Se siamo già praticamente al target, non rifare il fade
+        # If we are already practically at the target, do not redo the fade
         if abs(current_alpha - target) < 0.01:
-            print("Fading", current_alpha, "->", target, "in", duration, "ms\n -> (skipped)")
+            debug_print("Fading", current_alpha, "->", target, "in", duration, "ms\n -> (skipped)", cfg=self.config)
             return
 
-        print(f"Fading {current_alpha} -> {target} in {duration} ms")
+        debug_print(f"Fading {current_alpha} -> {target} in {duration} ms", cfg=self.config)
 
         self.fader.fade(
             start_alpha=current_alpha,
@@ -1610,7 +1956,7 @@ class MainForm:
         )
 
     def _has_open_secondary_windows(self):
-        """Verifica se ci sono altre finestre Toplevel aperte e visibili."""
+        """Check if there are other open and visible Toplevel windows."""
         try:
             for child in self.root.winfo_children():
                 if isinstance(child, tk.Toplevel) and child.winfo_exists():
@@ -1621,89 +1967,80 @@ class MainForm:
         return False
 
     def _on_focus_out(self, event=None):
-        """Fade-out solo quando il focus esce DAVVERO dalla finestra, con debounce."""
+        """Fade-out only when focus really leaves the window, with debounce."""
 
         now = time.time()
 
         if self._fade_in_progress:
-            print("Focus Out prevented (fade running)")
+            debug_print("Focus Out prevented (fade running)", cfg=self.config)
             return
 
-        # Debounce: ignora eventi troppo ravvicinati (< 80 ms)
+        # Debounce: ignore events too close (< 80 ms)
         if hasattr(self, "_last_focus_out") and (now - self._last_focus_out) < 0.08:
-            print("Focus Out prevented (debounced)")
+            debug_print("Focus Out prevented (debounced)", cfg=self.config)
             return
 
         self._last_focus_out = now
 
-        # 1) Blocco durante avvio o transizioni (es. menu) o se ci sono finestre secondarie aperte
-        if (not self.allow_focus_out or self._block_focus_out or 
+        # 1) Block during startup or transitions (e.g. menu) or if secondary windows are open
+        if (not self.allow_focus_out or self._block_focus_out or
             getattr(effects, "is_any_form_opening", False) or 
             self._has_open_secondary_windows()):
             
             if getattr(effects, "is_any_form_opening", False):
-                print("Focus Out prevented (internal form opening)")
-                # Abort fading e ripristina trasparenza attiva
+                debug_print("Focus Out prevented (internal form opening)", cfg=self.config)
+                # Abort fading and restore active transparency
                 self.fader.stop(reset_alpha=self.config.get("behaviour", {}).get("transparency_active", 100) / 100)
             elif self._has_open_secondary_windows():
-                print("Focus Out prevented (secondary window open)")
+                debug_print("Focus Out prevented (secondary window open)", cfg=self.config)
             else:
-                print(f"Focus Out prevented (startup/blocked, allow={self.allow_focus_out}, block={self._block_focus_out})")
+                debug_print(f"Focus Out prevented (startup/blocked, allow={self.allow_focus_out}, block={self._block_focus_out})", cfg=self.config)
             return
 
-        # 2) Blocco durante invio tag
+        # 2) Block during tag sending
         if self._sending_in_progress:
-            print("Focus Out prevented (sending)")
-            return
-
-        try:
-            self.config = load_config() or self.config
-        except Exception:
-            pass
-
-        beh = self.config.get("behaviour", {})
-        if beh.get("on_focus_loss", "do_nothing") != "fade_out":
-            print("Focus Out prevented (setting: do_nothing)")
+            debug_print("Focus Out prevented (sending)", cfg=self.config)
             return
 
         if not self.allow_fade:
-            print("Focus Out prevented (fade disabled)")
+            debug_print("Focus Out prevented (fade disabled)", cfg=self.config)
             return
 
-        # 3) Se il focus è ancora dentro l'applicazione -> NON è un vero FocusOut.
-        # Rilevamento avanzato: controlliamo se il widget focalizzato appartiene a una finestra di questa app.
+        # 3) If focus is still inside the application -> NOT a real FocusOut.
+        # Advanced detection: check if the focused widget belongs to a window in this app.
         try:
-            # focus_get() restituisce il widget se è in questo processo
+            # focus_get() returns the widget if it is in this process
             focused_widget = self.root.focus_get()
             if focused_widget is not None:
-                print(f"Focus Out prevented (focus on widget: {focused_widget})")
+                debug_print(f"Focus Out prevented (focus on widget: {focused_widget})", cfg=self.config)
                 return
                 
-            # Ulteriore controllo tramite displayof (copre casi particolari con Toplevel)
+            # Further check via displayof (covers special cases with Toplevel)
             focused_display = self.root.focus_displayof()
             if focused_display is not None:
-                print("Focus Out prevented (focus_displayof match)")
+                debug_print("Focus Out prevented (focus_displayof match)", cfg=self.config)
                 return
 
-            # Controllo grezzo del widget focalizzato tramite Tcl (copre popdown del Combobox)
+            # Raw check of focused widget via Tcl (covers Combobox popdown)
             raw_focus = self.root.tk.call('focus')
             if raw_focus and ('.popdown' in str(raw_focus).lower() or '.tk_choice_list' in str(raw_focus).lower()):
-                print(f"Focus Out prevented (focus on popdown: {raw_focus})")
+                debug_print(f"Focus Out prevented (focus on popdown: {raw_focus})", cfg=self.config)
                 return
         except (KeyError, tk.TclError):
             pass
 
-        # 4) Se siamo già sbiaditi, non rifare il fade
+        # 4) If we are already faded, do not redo the fade
+        beh = self.config.get("behaviour", {})
         target = beh.get("transparency_faded", 35) / 100
         current_alpha = float(self.root.attributes("-alpha"))
 
         if current_alpha <= target + 0.01:
-            print("Focus Out prevented (already faded)")
+            debug_print("Focus Out prevented (already faded)", cfg=self.config)
             return
 
-        print(">>> REAL FOCUS OUT DETECTED <<<")
+        debug_print(">>> REAL FOCUS OUT DETECTED <<<", cfg=self.config)
         duration = int(beh.get("fade_duration_ms", 300))
-        print(f"Fading {current_alpha} -> {target} in {duration} ms")
+        debug_print(f"Fading {current_alpha} -> {target} in {duration} ms", cfg=self.config)
 
         self.fader.fade(
             start_alpha=current_alpha,
@@ -1712,18 +2049,18 @@ class MainForm:
         )
 
     def _prevent_maximize(self, event):
-        # Se la finestra è massimizzata → ripristina la geometria salvata
+        # If window is maximized → restore saved geometry
         if self.root.state() == "zoomed":
             self.root.state("normal")
             self.apply_geometry()
 
     def _disable_maximize(self):
         """
-        Disabilita completamente la massimizzazione della finestra su Windows:
-        - rimuove il pulsante di massimizzazione
-        - blocca il doppio click sulla title-bar
-        - blocca Win+FrecciaSu
-        - evita il flash visivo della finestra che si massimizza per un istante
+        Completely disables window maximization on Windows:
+        - removes the maximize button
+        - blocks double-click on title-bar
+        - blocks Win+Up Arrow
+        - avoids visual flash of window maximizing for an instant
         """
         try:
             import ctypes
@@ -1732,17 +2069,17 @@ class MainForm:
 
             GWL_STYLE = -16
             WS_MAXIMIZEBOX = 0x00010000
-            WS_THICKFRAME = 0x00040000  # mantiene il resize manuale
+            WS_THICKFRAME = 0x00040000  # maintains manual resizing
 
             style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)
 
-            # Rimuove solo la capacità di massimizzare, NON il resize
+            # Removes only the ability to maximize, NOT resizing
             style &= ~WS_MAXIMIZEBOX
 
             ctypes.windll.user32.SetWindowLongW(hwnd, GWL_STYLE, style)
 
         except Exception:
-            # Su Linux o se ctypes non funziona → ignora silenziosamente
+            # On Linux or if ctypes doesn't work → silently ignore
             pass
 
     def _exit_app(self):
@@ -1756,17 +2093,22 @@ class MainForm:
             self._save_geometry_job = None
         self._flush_geometry_to_config()
 
-        # Ricarica la config aggiornata da OptionsForm
+        # Reload config updated from OptionsForm
         try:
             self.config = load_config()
         except Exception:
-            pass  # in caso di problemi, almeno non sovrascriviamo
+            pass  # in case of problems, at least we don't overwrite
 
-        # Chiude l'icona tray persistente, poi termina la UI
+        # Close the persistent tray icon, then terminate the UI
         try:
             if self.tray_icon is not None:
                 self.tray_icon.visible = False
                 self.tray_icon.stop()
+        except Exception:
+            pass
+        try:
+            if self._linux_instance_server is not None:
+                self._linux_instance_server.stop()
         except Exception:
             pass
         self.tray_running = False

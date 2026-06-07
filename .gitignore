@@ -4,3 +4,5 @@ josm_code_sender.log
 /.idea/inspectionProfiles
 /.idea
 /dist/
+/.idea
+/JOSM_Tagger.spec

@@ -21,6 +21,22 @@ def load_config():
         return json.load(f)
 
 
+def is_debug_mode(cfg=None):
+    if isinstance(cfg, bool):
+        return cfg
+    if isinstance(cfg, dict):
+        config = cfg
+    else:
+        config = load_config()
+
+    return bool(config.get("debug_mode", False))
+
+
+def debug_print(*args, cfg=None, **kwargs):
+    if is_debug_mode(cfg):
+        print(*args, **kwargs)
+
+
 def save_config(cfg):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
