@@ -36,24 +36,7 @@ from PIL import Image
 
 from config_manager import debug_print, load_config, save_config
 from codes_manager import load_codes
-from hotkeys import start_hotkeys
-if sys.platform.startswith("linux"):
-    from linux_hotkeys import (
-        start_hotkeys as start_linux_hotkeys,
-        linux_global_hotkeys_status,
-        linux_hotkey_matches,
-    )
-    from linux_instance_control import INSTANCE_SOCKET_PATH, LinuxInstanceServer
-else:
-    start_linux_hotkeys = None
-    LinuxInstanceServer = None
-    INSTANCE_SOCKET_PATH = None
-
-    def linux_global_hotkeys_status():
-        return "n/a"
-
-    def linux_hotkey_matches(event=None, spec="ctrl+0"):
-        return False
+from hotkeys import start_hotkeys # Keep this import
 import effects
 from effects import TransparencyFader, get_active_theme, apply_theme_colors, apply_background_picture
 from josm_interface import send_tags, focus_josm
@@ -173,11 +156,11 @@ class MainForm:
         # Track send() state
         self._sending_in_progress = False
         self._update_check_in_progress = False
-        self._hotkey_events = queue.Queue()
-        self._linux_instance_server = None
-        self._linux_shortcut_helper_path = Path.home() / "josmtagger.sh"
-        if sys.platform.startswith("linux"):
-            print(f"Linux pynput status: {linux_global_hotkeys_status()}")
+        self._hotkey_events = queue.Queue() # Keep this for internal hotkey processing
+        self._linux_instance_server = None # Remove this
+        self._linux_shortcut_helper_path = Path.home() / "josmtagger.sh" # Remove this
+        # if sys.platform.startswith("linux"): # Remove this
+        #     print(f"Linux pynput status: {linux_global_hotkeys_status()}") # Remove this
 
         # Keyboard shortcuts
         self.root.bind("<Control-f>", self.open_search)
@@ -243,8 +226,8 @@ class MainForm:
         self.apply_font()
         self.apply_theme()
         self.update_list()
-        self._start_linux_instance_server()
-        self.root.after(800, self._ensure_linux_shortcut_helper)
+        # self._start_linux_instance_server() # Remove this
+        # self.root.after(800, self._ensure_linux_shortcut_helper) # Remove this
         self._start_tray_icon()
         self.root.after(2000, self._auto_check_for_updates)
 
@@ -410,9 +393,9 @@ class MainForm:
         def setup_help_menu(m):
             m.add_command("Help", self.open_help)
             m.add_separator()
-            if sys.platform.startswith("linux"):
-                m.add_command("Linux shortcut helper", self._show_linux_shortcut_helper_message)
-                m.add_separator()
+            # if sys.platform.startswith("linux"): # Remove this
+            #     m.add_command("Linux shortcut helper", self._show_linux_shortcut_helper_message) # Remove this
+            #     m.add_separator() # Remove this
             m.add_command("Check for updates", self.check_for_updates_menu)
             m.add_separator()
             m.add_command("About", self.show_about)
@@ -873,12 +856,13 @@ class MainForm:
 
         self.root.update_idletasks()
 
-        # Place sash and fix upper pane
+        # Place sash so upper pane has fixed height
         try:
             self.paned.sash_place(0, 0, self.upper_height)
         except:
             pass
 
+        # Fix upper pane minimum height
         try:
             self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
         except:
@@ -1071,15 +1055,16 @@ class MainForm:
     # ---------------- HOTKEY ----------------
     def register_hotkey(self):
         hotkey_str = self.config.get("hotkey", "ctrl+0")
-        self._linux_hotkey_spec = hotkey_str
+        # self._linux_hotkey_spec = hotkey_str # Remove this
 
-        if sys.platform.startswith("linux"):
-            start_linux_hotkeys(self._queue_hotkey_trigger, hotkey_str)
-            print(f"Hotkey registration requested (Linux): {hotkey_str}")
-            return
+        # if sys.platform.startswith("linux"): # Remove this conditional block
+        #     start_linux_hotkeys(self._queue_hotkey_trigger, hotkey_str)
+        #     print(f"Hotkey registration requested (Linux): {hotkey_str}")
+        #     return
 
-        start_hotkeys(self._queue_hotkey_trigger, hotkey_str)
-        print(f"Hotkey registration requested: {hotkey_str}")
+        start_hotkeys(self._queue_hotkey_trigger, hotkey_str) # Use the unified start_hotkeys
+        debug_print(f"Hotkey registration requested: {hotkey_str}", cfg=self.config)
+
 
     def _queue_hotkey_trigger(self):
         try:
@@ -1088,31 +1073,31 @@ class MainForm:
             pass
 
     def _linux_shortcut_helper_content(self):
-        socket_path = str(INSTANCE_SOCKET_PATH or (Path.home() / ".josm_tagger_socket"))
+        # socket_path = str(INSTANCE_SOCKET_PATH or (Path.home() / ".josm_tagger_socket")) # Remove this
         return f"""#!/bin/sh
 set -eu
 
-SOCKET_PATH="{socket_path}"
+# SOCKET_PATH="{socket_path}" # Remove this
 
-if [ ! -S "$SOCKET_PATH" ]; then
-  exit 1
-fi
+# if [ ! -S "$SOCKET_PATH" ]; then # Remove this
+#   exit 1 # Remove this
+# fi # Remove this
 
-python3 - "$SOCKET_PATH" <<'PY'
-import socket
-import sys
+# python3 - "$SOCKET_PATH" <<'PY' # Remove this
+# import socket # Remove this
+# import sys # Remove this
 
-sock_path = sys.argv[1]
-sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-sock.settimeout(0.25)
-sock.connect(sock_path)
-sock.sendall(b"RESTORE\\n")
-try:
-    sock.shutdown(socket.SHUT_WR)
-except OSError:
-    pass
-sock.close()
-PY
+# sock_path = sys.argv[1] # Remove this
+# sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) # Remove this
+# sock.settimeout(0.25) # Remove this
+# sock.connect(sock_path) # Remove this
+# sock.sendall(b"RESTORE\\n") # Remove this
+# try: # Remove this
+#     sock.shutdown(socket.SHUT_WR) # Remove this
+# except OSError: # Remove this
+#     pass # Remove this
+# sock.close() # Remove this
+# PY # Remove this
 """
 
     def _ensure_linux_shortcut_helper(self):
@@ -1130,7 +1115,7 @@ PY
                 needs_message = True
             helper_path.chmod(0o755)
         except Exception as e:
-            print(f"Warning: could not create Linux shortcut helper {helper_path}: {e}")
+            debug_print(f"Warning: could not create Linux shortcut helper {helper_path}: {e}", cfg=self.config)
             return
 
         updates_cfg = self.config.setdefault("linux", {})
@@ -1160,18 +1145,19 @@ PY
         )
 
     def _start_linux_instance_server(self):
-        if not sys.platform.startswith("linux"):
-            return
-        if LinuxInstanceServer is None:
-            debug_print("Linux instance restore IPC unavailable.", cfg=self.config)
-            return
-        try:
-            self._linux_instance_server = LinuxInstanceServer(
-                self._queue_hotkey_trigger
-            ).start()
-            debug_print("Linux instance restore IPC: active", cfg=self.config)
-        except Exception as e:
-            debug_print(f"Warning: Linux instance restore IPC failed: {e}", cfg=self.config)
+        # if not sys.platform.startswith("linux"): # Remove this
+        #     return # Remove this
+        # if LinuxInstanceServer is None: # Remove this
+        #     debug_print("Linux instance restore IPC unavailable.", cfg=self.config) # Remove this
+        #     return # Remove this
+        # try: # Remove this
+        #     self._linux_instance_server = LinuxInstanceServer( # Remove this
+        #         self._queue_hotkey_trigger # Remove this
+        #     ).start() # Remove this
+        #     debug_print("Linux instance restore IPC: active", cfg=self.config) # Remove this
+        # except Exception as e: # Remove this
+        #     debug_print(f"Warning: Linux instance restore IPC failed: {e}", cfg=self.config) # Remove this
+        pass # Replace with pass
 
     def _process_hotkey_events(self):
         if self._is_exiting:
@@ -1574,9 +1560,9 @@ PY
         return self.show_history_menu_keyboard(event)
 
     def _on_global_keypress(self, event=None):
-        if sys.platform.startswith("linux") and linux_hotkey_matches(event, getattr(self, "_linux_hotkey_spec", "ctrl+0")):
-            self._queue_hotkey_trigger()
-            return "break"
+        # if sys.platform.startswith("linux") and linux_hotkey_matches(event, getattr(self, "_linux_hotkey_spec", "ctrl+0")): # Remove this
+        #     self._queue_hotkey_trigger() # Remove this
+        #     return "break" # Remove this
 
         if not self._focus_is_on_code_combobox():
             return None
@@ -2106,11 +2092,11 @@ PY
                 self.tray_icon.stop()
         except Exception:
             pass
-        try:
-            if self._linux_instance_server is not None:
-                self._linux_instance_server.stop()
-        except Exception:
-            pass
+        # try: # Remove this
+        #     if self._linux_instance_server is not None: # Remove this
+        #         self._linux_instance_server.stop() # Remove this
+        # except Exception: # Remove this
+        #     pass # Remove this
         self.tray_running = False
 
         self.root.destroy()

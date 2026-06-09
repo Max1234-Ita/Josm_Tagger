@@ -1,4 +1,3 @@
-
 # Build a .deb package for Linux Ubuntu/Mint to install Josm Tagger as a regular app
 
 
@@ -133,6 +132,46 @@ def clean():
 
 
 def build_pyinstaller():
+    # Trova la libreria Python condivisa usata dall'ambiente di build
+    python_lib_path = None
+    try:
+        # Questo comando cerca il percorso della libreria condivisa di Python
+        # che l'interprete corrente sta usando.
+        result = subprocess.run(
+            [sys.executable, "-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"],
+            capture_output=True, text=True, check=True
+        )
+        lib_dir = result.stdout.strip()
+        
+        result = subprocess.run(
+            [sys.executable, "-c", "import sysconfig; print(sysconfig.get_config_var('LDLIBRARY'))"],
+            capture_output=True, text=True, check=True
+        )
+        lib_name = result.stdout.strip()
+
+        if lib_dir and lib_name:
+            candidate_path = Path(lib_dir) / lib_name
+            if candidate_path.exists():
+                python_lib_path = candidate_path
+            else: # Fallback per nomi di libreria comuni (es. libpython3.14.so.1.0)
+                python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
+                candidate_path = Path(lib_dir) / f"libpython{python_version}.so.1.0"
+                if candidate_path.exists():
+                    python_lib_path = candidate_path
+                else:
+                    candidate_path = Path(lib_dir) / f"libpython{python_version}.so"
+                    if candidate_path.exists():
+                        python_lib_path = candidate_path
+
+    except Exception as e:
+        print(f"Warning: Could not determine Python shared library path: {e}")
+    
+    if python_lib_path:
+        print(f"Detected Python shared library: {python_lib_path}")
+    else:
+        print("Warning: Python shared library not found. PyInstaller might link dynamically.")
+
+
     cmd = [
         *pyinstaller_cmd(),
         "--clean",
@@ -147,8 +186,19 @@ def build_pyinstaller():
         pyinstaller_add_data("codes.json", "."),
         "--add-data",
         pyinstaller_add_data("config.json", "."),
+        "--add-data",
+        pyinstaller_add_data("app_metadata.py", "."), # Aggiunto per includere app_metadata.py
+        "--hidden-import", "gi._gi_cairo", # Aggiunto per risolvere il warning
+        "--hidden-import", "gi._option", # Aggiunto per risolvere il warning
+        "--hidden-import", "pynput.keyboard._xorg", # Forzare l'inclusione del backend Xorg di pynput
+        "--hidden-import", "pynput.keyboard._wayland", # Forzare l'inclusione del backend Wayland di pynput
         "main.py",
     ]
+
+    if python_lib_path:
+        # Aggiungi la libreria Python condivisa come binary
+        cmd.extend(["--add-binary", f"{python_lib_path}:."])
+
     run(cmd)
 
 
@@ -231,12 +281,13 @@ StartupNotify=true
         0o644,
     )
 
+    # AGGIORNAMENTO: Aggiunta di dipendenze di sistema comuni senza versione specifica
     control = f"""Package: {PACKAGE_NAME}
 Version: {version}
 Section: utils
 Priority: optional
 Architecture: {arch}
-Depends: wmctrl, xdotool, xclip, kbd, libayatana-appindicator3-1 | libappindicator3-1
+Depends: wmctrl, xdotool, xclip, kbd, libayatana-appindicator3-1 | libappindicator3-1, python3-xlib, python3-gi, python3-tk
 Recommends: josm
 Maintainer: Max1234-Ita <max1234ita@gmail.com>
 Description: Fast tagging helper for JOSM
