@@ -47,6 +47,8 @@
   },
   "command_history_items": 20,
   "command_history": [
+    "bg",
+    "gar",
     "bf",
     "pser",
     "tr",
@@ -54,12 +56,10 @@
     "bsh",
     "grg",
     "t",
-    "bg",
     "recy",
     "bw",
     "roof",
     "b",
-    "gar",
     "pfw",
     "eny",
     "nn",
@@ -68,13 +68,13 @@
     "grgs",
     "bl6"
   ],
-  "geometry_search": "761x500+310+288",
+  "geometry_search": "761x500+245+328",
   "geometry_options": "309x579+340+206",
   "josm_control_method": "remote_control",
   "geometry_tag_properties": "349x106+478+544",
   "updates": {
     "auto_check": true,
-    "last_check_utc": "2026-06-07T14:15:22.817839+00:00"
+    "last_check_utc": "2026-06-10T18:54:17.435608+00:00"
   },
   "debug_mode": false
 }

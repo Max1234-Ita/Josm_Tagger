@@ -43,7 +43,11 @@ if sys.platform.startswith("linux"):
         linux_global_hotkeys_status,
         linux_hotkey_matches,
     )
-    from linux_instance_control import INSTANCE_SOCKET_PATH, LinuxInstanceServer
+    try:
+        from linux_instance_control import INSTANCE_SOCKET_PATH, LinuxInstanceServer
+    except ImportError:
+        INSTANCE_SOCKET_PATH = None
+        LinuxInstanceServer = None
 else:
     start_linux_hotkeys = None
     LinuxInstanceServer = None
@@ -169,6 +173,7 @@ class MainForm:
         self._is_faded = False
 
         self.fader = TransparencyFader(self)
+        self.fade_duration_ms = int(self.config.get("behaviour", {}).get("fade_duration_ms", 300))
 
         # Track send() state
         self._sending_in_progress = False
@@ -876,13 +881,9 @@ class MainForm:
         # Place sash and fix upper pane
         try:
             self.paned.sash_place(0, 0, self.upper_height)
-        except:
-            pass
-
-        try:
             self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
-        except:
-            pass
+        except Exception:
+            pass # Ignore if panes are not yet ready
 
         # Adjust window height to match saved layout
         w = self.root.winfo_width()
@@ -1203,8 +1204,16 @@ PY
         self.root.lift()
         self.root.attributes("-topmost", True)
         self.root.after(25, lambda: self.root.attributes("-topmost", False))
-        self.root.after(10, self._force_focus)
+        
+        # Aggressive focus: multiple attempts with increasing delays for .exe compatibility
+        self.root.after(0, self._force_focus)
+        self.root.after(5, self._force_focus)
+        self.root.after(15, self._force_focus)
+        self.root.after(30, self._force_focus)
         self.root.after(60, self._force_focus)
+        self.root.after(100, self._force_focus)
+        self.root.after(150, self._force_focus)
+        
         self.flash_window()
 
     def focus_input(self):
@@ -1222,10 +1231,39 @@ PY
             pass
 
     def _force_focus(self):
+        """Aggressively force focus on the window and entry box."""
         try:
+            self.root.update_idletasks()
             self.root.focus_force()
             self._activate_entry_for_next_command()
-        except:
+            
+            # On Windows, try to force focus via ctypes for .exe compatibility
+            if sys.platform.startswith("win"):
+                try:
+                    import ctypes
+                    # Get the window handle of the Tkinter window
+                    hwnd = self.root.winfo_id()
+
+                    # Get the ID of the foreground window's thread
+                    foreground_hwnd = ctypes.windll.user32.GetForegroundWindow()
+                    foreground_thread_id = ctypes.windll.user32.GetWindowThreadProcessId(foreground_hwnd, None)
+                    
+                    # Get the ID of our application's thread
+                    current_thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
+
+                    # Attach our thread to the foreground window's thread
+                    ctypes.windll.user32.AttachThreadInput(current_thread_id, foreground_thread_id, True)
+                    
+                    # Bring window to foreground (Windows API)
+                    ctypes.windll.user32.SetForegroundWindow(hwnd)
+                    ctypes.windll.user32.SetActiveWindow(hwnd)
+
+                    # Detach our thread from the foreground window's thread
+                    ctypes.windll.user32.AttachThreadInput(current_thread_id, foreground_thread_id, False)
+
+                except Exception:
+                    pass
+        except Exception:
             pass
 
     def flash_window(self):
@@ -1463,9 +1501,8 @@ PY
                         hide_delay = int(beh.get("hide_delay", 150))
                         if control_method == "remote_control":
                             hide_delay = min(hide_delay, int(beh.get("remote_control_hide_delay", 50)))
-                        fade_duration = int(beh.get("fade_duration_ms", 300))
                         self.root.after(hide_delay, self._fade_then_minimize_to_tray)
-                        self.root.after(hide_delay + fade_duration + 100, lambda: setattr(self, "_block_focus_out", False))
+                        self.root.after(hide_delay + self.fade_duration_ms + 100, lambda: setattr(self, "_block_focus_out", False))
                     else:
                         self._block_focus_out = False
 
@@ -1637,6 +1674,8 @@ PY
         self.bg_color = active.get("bg", "#2b2b2b")
         self.fg_color = active.get("fg", "#ffffff")
         self.apply_theme()
+        # Reload fade duration from config (user may have changed it in preferences)
+        self.fade_duration_ms = int(self.config.get("behaviour", {}).get("fade_duration_ms", 300))
 
         for child in self.root.winfo_children():
             try:
@@ -1822,7 +1861,6 @@ PY
             self._block_focus_out = True
 
             beh = self.config.get("behaviour", {})
-            duration = int(beh.get("fade_duration_ms", 300))
             target = beh.get("transparency_faded", 35) / 100
             current_alpha = float(self.root.attributes("-alpha"))
 
@@ -1830,10 +1868,10 @@ PY
                 self.fader.fade(
                     start_alpha=current_alpha,
                     end_alpha=target,
-                    duration_ms=duration
+                    duration_ms=self.fade_duration_ms
                 )
 
-            self.root.after(duration, self.minimize_to_tray)
+            self.root.after(self.fade_duration_ms, self.minimize_to_tray)
         else:
             debug_print('Fading prevented. allow_fade = False', cfg=self.config)
 
@@ -1886,23 +1924,26 @@ PY
         self.root.attributes("-topmost", True)
         self.root.after(50, lambda: self.root.attributes("-topmost", False))
 
-        # Immediate focus: the user must be able to type even during fade-in.
-        self.root.after(10, self._force_focus)
+        # Aggressive focus: multiple attempts with increasing delays for .exe compatibility
+        self.root.after(0, self._force_focus)
+        self.root.after(5, self._force_focus)
+        self.root.after(15, self._force_focus)
         self.root.after(30, self._force_focus)
-        self.root.after(120, self._force_focus)
+        self.root.after(60, self._force_focus)
+        self.root.after(100, self._force_focus)
+        self.root.after(150, self._force_focus)
 
         # Non-blocking fade-in
         try:
             beh = self.config.get("behaviour", {})
             target = beh.get("transparency_active", 100) / 100
-            duration = int(beh.get("fade_duration_ms", 300))
             current_alpha = float(self.root.attributes("-alpha"))
 
             if current_alpha < target - 0.01:
                 self.fader.fade(
                     start_alpha=current_alpha,
                     end_alpha=target,
-                    duration_ms=duration
+                    duration_ms=self.fade_duration_ms
                 )
             else:
                 self.root.attributes("-alpha", target)
@@ -1940,19 +1981,18 @@ PY
         beh = self.config.get("behaviour", {})
         target = beh.get("transparency_active", 100) / 100
         current_alpha = float(self.root.attributes("-alpha"))
-        duration = int(beh.get("fade_duration_ms", 300))
 
         # If we are already practically at the target, do not redo the fade
         if abs(current_alpha - target) < 0.01:
-            debug_print("Fading", current_alpha, "->", target, "in", duration, "ms\n -> (skipped)", cfg=self.config)
+            debug_print("Fading", current_alpha, "->", target, "in", self.fade_duration_ms, "ms\n -> (skipped)", cfg=self.config)
             return
 
-        debug_print(f"Fading {current_alpha} -> {target} in {duration} ms", cfg=self.config)
+        debug_print(f"Fading {current_alpha} -> {target} in {self.fade_duration_ms} ms", cfg=self.config)
 
         self.fader.fade(
             start_alpha=current_alpha,
             end_alpha=target,
-            duration_ms=duration
+            duration_ms=self.fade_duration_ms
         )
 
     def _has_open_secondary_windows(self):
@@ -2023,7 +2063,7 @@ PY
 
             # Raw check of focused widget via Tcl (covers Combobox popdown)
             raw_focus = self.root.tk.call('focus')
-            if raw_focus and ('.popdown' in str(raw_focus).lower() or '.tk_choice_list' in str(raw_focus).lower()):
+            if raw_focus and (('.popdown' in str(raw_focus).lower()) or ('.tk_choice_list' in str(raw_focus).lower())):
                 debug_print(f"Focus Out prevented (focus on popdown: {raw_focus})", cfg=self.config)
                 return
         except (KeyError, tk.TclError):
@@ -2039,13 +2079,12 @@ PY
             return
 
         debug_print(">>> REAL FOCUS OUT DETECTED <<<", cfg=self.config)
-        duration = int(beh.get("fade_duration_ms", 300))
-        debug_print(f"Fading {current_alpha} -> {target} in {duration} ms", cfg=self.config)
+        debug_print(f"Fading {current_alpha} -> {target} in {self.fade_duration_ms} ms", cfg=self.config)
 
         self.fader.fade(
             start_alpha=current_alpha,
             end_alpha=target,
-            duration_ms=duration
+            duration_ms=self.fade_duration_ms
         )
 
     def _prevent_maximize(self, event):

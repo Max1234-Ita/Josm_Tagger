@@ -1,4 +1,3 @@
-
 # -------------------------------------------------------------------------
 # Build Windows executable with PyInstaller
 
@@ -8,10 +7,20 @@ import os
 from pathlib import Path
 import shutil
 
+from app_metadata import APP_VERSION
+
 def build_exe():
     # Main script path
 
     main_script = "main.py"
+    sourcedir = Path(__file__).parent
+    dist_dir = sourcedir / "dist"
+
+    # Clean previous release artifacts so they do not get re-packaged.
+    if dist_dir.exists():
+        print(f"Cleaning previous dist directory: {dist_dir}")
+        shutil.rmtree(dist_dir)
+    dist_dir.mkdir(parents=True, exist_ok=True) # Recreate the directory
 
     # Check if the file exists
     if not os.path.exists(main_script):
@@ -53,10 +62,9 @@ def build_exe():
             "resources",
         ]
 
-        sourcedir = Path(__file__).parent
         print(f'Source directory: {sourcedir}')
 
-        targetdir = Path(sourcedir / 'dist')
+        targetdir = dist_dir
         print(f'Target directory: {targetdir}')
 
         for item in files_to_copy:
@@ -81,20 +89,20 @@ def build_exe():
 
         # -------------------------------------------------------------------------
         # Create ZIP archive
-        dist_dir = Path(__file__).parent / "dist"
-        zip_path = dist_dir / "Josm_Tagger"
+        zip_name = f"josm-tagger_{APP_VERSION}_win"
+        zip_path = dist_dir / zip_name
 
-        zip_temp = Path(__file__).parent / "Josm_Tagger"
+        zip_temp = sourcedir / zip_name
 
         print(f"\nCreating ZIP archive: {zip_path}.zip")
 
         shutil.make_archive(
-            base_name=str(zip_temp),  # senza .zip
+            base_name=str(zip_temp),  # without '.zip'
             format="zip",
-            root_dir=dist_dir  # zippa tutto il contenuto di dist
+            root_dir=dist_dir  # zip the entire directory contents
         )
 
-        final_zip = dist_dir / "Josm_Tagger.zip"
+        final_zip = dist_dir / f"{zip_name}.zip"
         shutil.move(f"{zip_temp}.zip", final_zip)
 
         print(f"ZIP created successfully at: {final_zip}")
