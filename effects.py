@@ -3,6 +3,7 @@
 import os
 import tkinter as tk
 from PIL import Image, ImageTk
+from tkinter import ttk
 
 from config_manager import debug_print, load_config
 
@@ -139,9 +140,7 @@ def apply_background_picture(window, config=None):
     window._bg_image_label.configure(image=window._bg_image_tk)
 
 
-from tkinter import ttk
-
-def setup_scrollbar_style(config):
+def _setup_scrollbar_style(config):
     """Configura lo stile TTK per le scrollbar in base al tema corrente."""
     theme = get_active_theme(config)
     bg = theme.get("bg")
@@ -167,54 +166,69 @@ def setup_scrollbar_style(config):
               background=[('active', '#0078d7')],
               arrowcolor=[('active', 'white')])
 
-def apply_theme_colors(window, config=None):
-    theme = get_active_theme(config)
-    bg = theme.get("bg", "#f0f0f0")
-    panel = theme.get("panel", bg)
-    fg = theme.get("fg", "#101010")
-    panel_fg = theme.get("panel_fg", fg)
+def _apply_theme_colors_recursive(widget, theme, root_widget=False):
+    """Applica ricorsivamente i colori del tema ai widget Tkinter."""
+    bg = theme.get("bg")
+    panel = theme.get("panel")
+    fg = theme.get("fg")
+    panel_fg = theme.get("panel_fg")
+
+    target_bg = bg if root_widget else panel
+    target_fg = fg if root_widget else panel_fg
     
-    # Inizializza stile scrollbar TTK
-    setup_scrollbar_style(config)
-
-    def apply(widget, root_widget=False):
-        target_bg = bg if root_widget else panel
-        target_fg = fg if root_widget else panel_fg
-        
-        # Gestione speciale per Menu
-        if isinstance(widget, tk.Menu):
+    # Gestione speciale per Menu
+    if isinstance(widget, tk.Menu):
+        try:
+            widget.configure(bg=panel, fg=panel_fg, 
+                             activebackground="#0078d7", activeforeground="white",
+                             relief="flat")
+        except Exception:
+            pass
+    # Gestione speciale per Listbox
+    elif isinstance(widget, tk.Listbox):
+        try:
+            widget.configure(background=panel, foreground=panel_fg,
+                             selectbackground="#0078d7", selectforeground="white",
+                             highlightbackground=panel, highlightcolor=panel_fg)
+        except Exception:
+            pass
+    # Gestione speciale per Scrollbar
+    elif isinstance(widget, tk.Scrollbar):
+        try:
+            widget.configure(bg=panel, troughcolor=bg, 
+                             activebackground="#0078d7",
+                             highlightthickness=0, bd=0)
+        except:
+            pass
+    # Gestione speciale per Spinbox
+    elif isinstance(widget, tk.Spinbox):
+        try:
+            widget.configure(bg=panel, fg=panel_fg, 
+                             buttonbackground=panel,
+                             insertbackground=panel_fg)
+        except:
+            pass
+    # Gestione per altri widget Tk
+    else:
+        try:
+            widget.configure(bg=target_bg, fg=target_fg)
+        except Exception:
             try:
-                widget.configure(bg=panel, fg=panel_fg, 
-                                 activebackground="#0078d7", activeforeground="white",
-                                 relief="flat")
+                widget.configure(bg=target_bg)
             except Exception:
                 pass
-        # Gestione speciale per Scrollbar
-        elif isinstance(widget, tk.Scrollbar):
-            try:
-                widget.configure(bg=panel, troughcolor=bg, 
-                                 activebackground="#0078d7",
-                                 highlightthickness=0, bd=0)
-            except:
-                pass
-        # Gestione speciale per Spinbox
-        elif isinstance(widget, tk.Spinbox):
-            try:
-                widget.configure(bg=panel, fg=panel_fg, 
-                                 buttonbackground=panel,
-                                 insertbackground=panel_fg)
-            except:
-                pass
-        else:
-            try:
-                widget.configure(bg=target_bg, fg=target_fg)
-            except Exception:
-                try:
-                    widget.configure(bg=target_bg)
-                except Exception:
-                    pass
-                    
-        for child in widget.winfo_children():
-            apply(child, root_widget=False)
+                
+    for child in widget.winfo_children():
+        _apply_theme_colors_recursive(child, theme, root_widget=False)
 
-    apply(window, root_widget=True)
+def apply_theme_colors(window, config=None):
+    """
+    Applica il tema corrente a tutti i widget Tkinter e configura gli stili TTK.
+    """
+    theme = get_active_theme(config)
+    
+    # Configura gli stili TTK (es. per Combobox, Scrollbar TTK)
+    _setup_scrollbar_style(config)
+
+    # Applica ricorsivamente i colori ai widget Tkinter
+    _apply_theme_colors_recursive(window, theme, root_widget=True)

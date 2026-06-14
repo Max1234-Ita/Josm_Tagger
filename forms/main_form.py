@@ -43,7 +43,12 @@ if sys.platform.startswith("linux"):
         linux_global_hotkeys_status,
         linux_hotkey_matches,
     )
-    from linux_instance_control import INSTANCE_SOCKET_PATH, LinuxInstanceServer
+    try:
+        from linux_instance_control import INSTANCE_SOCKET_PATH, LinuxInstanceServer
+    except ImportError:
+        # Fallback if linux_instance_control is not available (e.g., during development on non-merged branch)
+        LinuxInstanceServer = None
+        INSTANCE_SOCKET_PATH = None
 else:
     start_linux_hotkeys = None
     LinuxInstanceServer = None
@@ -62,6 +67,7 @@ from url_launcher import open_url_in_default_browser # Re-added import
 from forms.tag_editor_form import TagEditorForm
 from forms.font_selector_form import FontSelectorForm
 from forms.search_form import SearchForm
+from window_mgmt import get_window_manager
 
 
 def resource_path(relative_path):
@@ -113,8 +119,7 @@ class MainForm:
         self.root.main_form_instance = self
         self.config = load_config()
         self.codes = load_codes()
-
-        self._disable_maximize()
+        self.win_mgmt = get_window_manager(self) # Initialize window manager
 
         root.title("JOSM Tagger")
         root.attributes("-topmost", True)
@@ -130,10 +135,9 @@ class MainForm:
         self._tray_minimize_notice_shown = False
 
         # --- THEME ---
-        theme = get_active_theme(self.config)
-        self.bg_color = theme.get("bg", "#2b2b2b")
-        self.fg_color = theme.get("fg", "#ffffff")
-        self.root.configure(bg=self.bg_color)
+        # Initial theme application handled by apply_theme() later
+        self.bg_color = None # Will be set by apply_theme
+        self.fg_color = None # Will be set by apply_theme
 
         # --- APP ICON ---
         try:
@@ -145,33 +149,30 @@ class MainForm:
         # --- MIN FORM SIZE ---
         self.root.minsize(256, 160)
 
-        # --- DISABLE MAXIMIZE BUTTON ---
-        try:
-            self.root.attributes("-toolwindow", True)
-        except:
-            pass
-
         # --- GEOMETRY ---
         self.apply_geometry()
-        self.root.bind("<Configure>", self._prevent_maximize)
+        self.root.bind("<Configure>", self.win_mgmt.prevent_maximize)
         self.root.bind("<Configure>", self._on_main_configure, add="+")
 
         # X → minimize to tray
         self.root.protocol("WM_DELETE_WINDOW", self._on_main_window_close)
 
-        # --- WINDOW FADING ---
-        # Semaphores to control when it is allowed to react to focus-out and when not.
+        # --- WINDOW STATE ---
         self.allow_minimize = True
         self.allow_fade = True
         self._fade_in_progress = False
         self.allow_focus_out = False
         self.root.after(500, lambda: setattr(self, "allow_focus_out", True))
         self._is_faded = False
-
         self.fader = TransparencyFader(self)
+        self._sending_in_progress = False
+        self._block_focus_out = False
+        # fade_duration_ms will be set by apply_theme or _apply_runtime_theme
+
+        # --- WINDOW MANAGER (OS Specific Focus & Maximize) ---
+        self.win_mgmt.setup_window_behavior()
 
         # Track send() state
-        self._sending_in_progress = False
         self._update_check_in_progress = False
         self._hotkey_events = queue.Queue()
         self._linux_instance_server = None
@@ -183,34 +184,6 @@ class MainForm:
         self.root.bind("<Control-f>", self.open_search)
         self.root.bind("<Control-F>", self.open_search)
         self.root.bind("<Alt-F4>", lambda e: self._exit_app())
-
-        # --- ISOLATE FOCUS EVENTS (fix double FocusIn/Out) ---
-        # Removes class Toplevel and 'all' bindings for FocusIn/Out
-        tags = list(self.root.bindtags())
-        # typical tags: ('.!toplevel', 'Toplevel', 'all')
-
-        # Create a dedicated group ONLY for our events
-        if "FocusGroup" not in tags:
-            tags.insert(1, "FocusGroup")  # right after the widget itself
-
-        # Remove Toplevel to avoid double events
-        if "Toplevel" in tags:
-            tags.remove("Toplevel")
-
-        self.root.bindtags(tuple(tags))
-
-        # Ensure that ONLY FocusGroup receives the events
-        self.root.bind_class("FocusGroup", "<FocusIn>", self._on_focus_in)
-        self.root.bind_class("FocusGroup", "<FocusOut>", self._on_focus_out)
-
-        # Initial transparency
-        beh = self.config.get("behaviour", {})
-        alpha = beh.get("transparency_active", 100) / 100
-        self.root.attributes("-alpha", alpha)
-
-        # Flag to delay fading during send()
-        self._sending_in_progress = False
-        self._block_focus_out = False
 
         # Declared attributes
         self.filtered_codes = []
@@ -241,7 +214,7 @@ class MainForm:
         self.register_hotkey()
         self.root.after(100, self._process_hotkey_events)
         self.apply_font()
-        self.apply_theme()
+        self.apply_theme() # Initial theme application
         self.update_list()
         self._start_linux_instance_server()
         self.root.after(800, self._ensure_linux_shortcut_helper)
@@ -257,7 +230,7 @@ class MainForm:
 
         # Restore panes layout after Tk has stabilized geometry
         self.root.after_idle(self._restore_panes_layout)
-        self.root.after(120, self._force_focus)
+        self.root.after(120, self.win_mgmt.force_focus)
 
     # ---------------------------------------------------------
     # GEOMETRY
@@ -716,14 +689,10 @@ class MainForm:
         label = tk.Label(
             tw,
             text=text,
-            bg="#ffffe0",
-            fg="black",
-            justify="left",
-            font=self.entry.cget("font"),
-            relief="solid",
+            background="#ffffe0",
+            relief=tk.SOLID,
             borderwidth=1,
-            highlightthickness=1,
-            highlightbackground="#aaaaaa"
+            font=("Arial", 8)
         )
         label.pack(ipadx=4, ipady=2)
 
@@ -814,7 +783,6 @@ class MainForm:
         except:
             pass
 
-        # Fix upper pane minimum height
         try:
             self.paned.paneconfig(self.paned.panes()[0], minsize=self.upper_height)
         except:
@@ -873,7 +841,7 @@ class MainForm:
 
         self.root.update_idletasks()
 
-        # Place sash and fix upper pane
+        # Place sash so upper pane has fixed height
         try:
             self.paned.sash_place(0, 0, self.upper_height)
         except:
@@ -890,6 +858,11 @@ class MainForm:
         self.root.geometry(f"{w}x{total_h}")
 
         self.root.update_idletasks()
+        try:
+            self.preview_height = max(160, self.preview_frame.winfo_height())
+        except:
+            self.preview_height = 160
+
         self.save_config()
 
     # ---------------- CONTEXT MENU ----------------
@@ -967,78 +940,28 @@ class MainForm:
     # ---------------- THEME ----------------
     def apply_theme(self):
         """Apply the active theme to compatible Tk widgets."""
+        # Use the centralized theme application from effects.py
         apply_theme_colors(self.root, self.config)
         
-        # Extra fixes for widgets that require specific parameters (panel_fg)
+        # Update main_form's bg_color and fg_color attributes
         theme = get_active_theme(self.config)
-        panel_color = theme.get("panel")
-        panel_fg = theme.get("panel_fg")
-        bg_color = theme.get("bg")
-        fg_color = theme.get("fg")
-        
-        # TTK style for Combobox
-        style = ttk.Style(self.root)
-        if "clam" in style.theme_names():
-            style.theme_use("clam")
-        
-        style.configure("TCombobox", 
-                        fieldbackground=panel_color, 
-                        background=panel_color, 
-                        foreground=panel_fg,
-                        arrowcolor=panel_fg)
-        
-        # Dropdown colors
-        self.root.option_add("*TCombobox*Listbox.background", panel_color)
-        self.root.option_add("*TCombobox*Listbox.foreground", panel_fg)
-        self.root.option_add("*TCombobox*Listbox.selectBackground", "#0078d7")
-        
-        # Custom menu bar theming
-        if hasattr(self, "menubar_frame"):
-            self.menubar_frame.configure(bg=bg_color)
-        
-        if hasattr(self, "menu_buttons"):
-            for btn in self.menu_buttons:
-                try:
-                    btn.configure(bg=bg_color, fg=fg_color, 
-                                  activebackground="#0078d7", activeforeground="white")
-                except:
-                    pass
-        
-        if hasattr(self, "menus"):
-            for menu in self.menus:
-                try:
-                    menu.configure(bg=panel_color, fg=panel_fg, 
-                                   activebackground="#0078d7", activeforeground="white")
-                    # Try to force color on individual elements
-                    for i in range(menu.index("end") + 1):
-                        try:
-                            menu.entryconfigure(i, background=panel_color, foreground=panel_fg)
-                        except:
-                            pass
-                except:
-                    pass
+        self.bg_color = theme.get("bg", "#2b2b2b")
+        self.fg_color = theme.get("fg", "#ffffff")
+        self.fade_duration_ms = int(self.config.get("behaviour", {}).get("fade_duration_ms", 300)) # Update fade duration
 
-        def apply_extra(widget):
-            if isinstance(widget, (tk.Entry, tk.Listbox)):
-                try:
-                    widget.configure(bg=panel_color, fg=panel_fg)
-                    if hasattr(widget, "configure") and "insertbackground" in widget.keys():
-                        widget.configure(insertbackground=panel_fg)
-                except:
-                    pass
-            
-            if isinstance(widget, tk.Listbox):
-                try:
-                    widget.configure(selectbackground="#0078d7", selectforeground="white")
-                except:
-                    pass
-                    
-            for child in widget.winfo_children():
-                # Avoid recoloring menus here, we did it specifically above
-                if not isinstance(child, tk.Menu):
-                    apply_extra(child)
-        
-        apply_extra(self.root)
+    def _apply_runtime_theme(self):
+        # Reload config to get latest theme settings
+        self.config = load_config() 
+        self.apply_theme() # Re-apply theme immediately
+
+        # Apply theme to any open Toplevel windows (like preferences, editor, etc.)
+        for child in self.root.winfo_children():
+            try:
+                if isinstance(child, tk.Toplevel):
+                    effects.apply_theme_colors(child, self.config)
+                    effects.apply_background_picture(child, self.config)
+            except Exception:
+                pass
 
     # ---------------- FONT ----------------
     def apply_font(self):
@@ -1203,8 +1126,16 @@ PY
         self.root.lift()
         self.root.attributes("-topmost", True)
         self.root.after(25, lambda: self.root.attributes("-topmost", False))
-        self.root.after(10, self._force_focus)
-        self.root.after(60, self._force_focus)
+        
+        # Aggressive focus: multiple attempts with increasing delays for .exe compatibility
+        self.root.after(0, self.win_mgmt.force_focus)
+        self.root.after(5, self.win_mgmt.force_focus)
+        self.root.after(15, self.win_mgmt.force_focus)
+        self.root.after(30, self.win_mgmt.force_focus)
+        self.root.after(60, self.win_mgmt.force_focus)
+        self.root.after(100, self.win_mgmt.force_focus)
+        self.root.after(150, self.win_mgmt.force_focus)
+        
         self.flash_window()
 
     def focus_input(self):
@@ -1222,11 +1153,7 @@ PY
             pass
 
     def _force_focus(self):
-        try:
-            self.root.focus_force()
-            self._activate_entry_for_next_command()
-        except:
-            pass
+        self.win_mgmt.force_focus()
 
     def flash_window(self):
         try:
@@ -1463,9 +1390,8 @@ PY
                         hide_delay = int(beh.get("hide_delay", 150))
                         if control_method == "remote_control":
                             hide_delay = min(hide_delay, int(beh.get("remote_control_hide_delay", 50)))
-                        fade_duration = int(beh.get("fade_duration_ms", 300))
                         self.root.after(hide_delay, self._fade_then_minimize_to_tray)
-                        self.root.after(hide_delay + fade_duration + 100, lambda: setattr(self, "_block_focus_out", False))
+                        self.root.after(hide_delay + self.fade_duration_ms + 100, lambda: setattr(self, "_block_focus_out", False))
                     else:
                         self._block_focus_out = False
 
@@ -1632,23 +1558,7 @@ PY
         SearchForm(self, self.codes, self.config)
         self.root.after(1500, self._restore_fade_away)
 
-    def _apply_runtime_theme(self):
-        active = get_active_theme(self.config)
-        self.bg_color = active.get("bg", "#2b2b2b")
-        self.fg_color = active.get("fg", "#ffffff")
-        self.apply_theme()
-
-        for child in self.root.winfo_children():
-            try:
-                if isinstance(child, tk.Toplevel):
-                    apply_theme_colors(child, self.config)
-                    apply_background_picture(child, self.config)
-            except Exception:
-                pass
-
-    # ---------------------------------------------------------
-    # SYSTEM TRAY SUPPORT (pystray)
-    # ---------------------------------------------------------
+    # ---------------- SYSTEM TRAY SUPPORT (pystray) ----------------
     def minimize_to_tray(self):
         """Hides the window and starts the tray using pystray."""
         if self._is_exiting:
@@ -1803,6 +1713,13 @@ PY
                     )
                     if should_open:
                         open_url_in_default_browser(result.get("url"))
+                elif status == "newer_than_available":
+                    if interactive:
+                        messagebox.showinfo(
+                            "Newer than available",
+                            f"Your installed version ({current_version}) is newer than the latest published version ({result.get('latest_version')}).",
+                            parent=self.root,
+                        )
 
             self.root.after(0, finish)
 
@@ -1817,25 +1734,7 @@ PY
         self.minimize_to_tray()
 
     def _fade_then_minimize_to_tray(self):
-        if self.allow_fade:
-            """Performs fade-out first and only then hides the window in tray."""
-            self._block_focus_out = True
-
-            beh = self.config.get("behaviour", {})
-            duration = int(beh.get("fade_duration_ms", 300))
-            target = beh.get("transparency_faded", 35) / 100
-            current_alpha = float(self.root.attributes("-alpha"))
-
-            if current_alpha > target + 0.01:
-                self.fader.fade(
-                    start_alpha=current_alpha,
-                    end_alpha=target,
-                    duration_ms=duration
-                )
-
-            self.root.after(duration, self.minimize_to_tray)
-        else:
-            debug_print('Fading prevented. allow_fade = False', cfg=self.config)
+        self.win_mgmt.fade_then_minimize_to_tray()
 
     def _start_tray_icon(self):
         """Creates the tray icon using run_detached() from the GitHub version."""
@@ -1886,10 +1785,14 @@ PY
         self.root.attributes("-topmost", True)
         self.root.after(50, lambda: self.root.attributes("-topmost", False))
 
-        # Immediate focus: the user must be able to type even during fade-in.
-        self.root.after(10, self._force_focus)
-        self.root.after(30, self._force_focus)
-        self.root.after(120, self._force_focus)
+        # Aggressive focus: multiple attempts with increasing delays for .exe compatibility
+        self.root.after(0, self.win_mgmt.force_focus)
+        self.root.after(5, self.win_mgmt.force_focus)
+        self.root.after(15, self.win_mgmt.force_focus)
+        self.root.after(30, self.win_mgmt.force_focus)
+        self.root.after(60, self.win_mgmt.force_focus)
+        self.root.after(100, self.win_mgmt.force_focus)
+        self.root.after(150, self.win_mgmt.force_focus)
 
         # Non-blocking fade-in
         try:
@@ -1917,170 +1820,19 @@ PY
 
     def _force_focus_on_entry(self):
         """Force focus on the textbox after restore."""
-        self._force_focus()
+        self.win_mgmt.force_focus()
 
     def _on_focus_in(self, event=None):
-        """Fade-in only when necessary, with debounce."""
-        effects.fade_away = True
-        self.root.after_idle(self._activate_entry_for_next_command)
-
-        now = time.time()
-
-        if self._fade_in_progress:
-            debug_print("Focus In prevented (fade running)", cfg=self.config)
-            return
-
-        # Debounce: ignore events too close (< 80 ms)
-        if hasattr(self, "_last_focus_in") and (now - self._last_focus_in) < 0.08:
-            debug_print("Focus In prevented (debounced)", cfg=self.config)
-            return
-
-        self._last_focus_in = now
-
-        beh = self.config.get("behaviour", {})
-        target = beh.get("transparency_active", 100) / 100
-        current_alpha = float(self.root.attributes("-alpha"))
-        duration = int(beh.get("fade_duration_ms", 300))
-
-        # If we are already practically at the target, do not redo the fade
-        if abs(current_alpha - target) < 0.01:
-            debug_print("Fading", current_alpha, "->", target, "in", duration, "ms\n -> (skipped)", cfg=self.config)
-            return
-
-        debug_print(f"Fading {current_alpha} -> {target} in {duration} ms", cfg=self.config)
-
-        self.fader.fade(
-            start_alpha=current_alpha,
-            end_alpha=target,
-            duration_ms=duration
-        )
-
-    def _has_open_secondary_windows(self):
-        """Check if there are other open and visible Toplevel windows."""
-        try:
-            for child in self.root.winfo_children():
-                if isinstance(child, tk.Toplevel) and child.winfo_exists():
-                    if child.winfo_viewable():
-                        return True
-        except:
-            pass
-        return False
+        self.win_mgmt.on_focus_in(event)
 
     def _on_focus_out(self, event=None):
-        """Fade-out only when focus really leaves the window, with debounce."""
-
-        now = time.time()
-
-        if self._fade_in_progress:
-            debug_print("Focus Out prevented (fade running)", cfg=self.config)
-            return
-
-        # Debounce: ignore events too close (< 80 ms)
-        if hasattr(self, "_last_focus_out") and (now - self._last_focus_out) < 0.08:
-            debug_print("Focus Out prevented (debounced)", cfg=self.config)
-            return
-
-        self._last_focus_out = now
-
-        # 1) Block during startup or transitions (e.g. menu) or if secondary windows are open
-        if (not self.allow_focus_out or self._block_focus_out or
-            getattr(effects, "is_any_form_opening", False) or 
-            self._has_open_secondary_windows()):
-            
-            if getattr(effects, "is_any_form_opening", False):
-                debug_print("Focus Out prevented (internal form opening)", cfg=self.config)
-                # Abort fading and restore active transparency
-                self.fader.stop(reset_alpha=self.config.get("behaviour", {}).get("transparency_active", 100) / 100)
-            elif self._has_open_secondary_windows():
-                debug_print("Focus Out prevented (secondary window open)", cfg=self.config)
-            else:
-                debug_print(f"Focus Out prevented (startup/blocked, allow={self.allow_focus_out}, block={self._block_focus_out})", cfg=self.config)
-            return
-
-        # 2) Block during tag sending
-        if self._sending_in_progress:
-            debug_print("Focus Out prevented (sending)", cfg=self.config)
-            return
-
-        if not self.allow_fade:
-            debug_print("Focus Out prevented (fade disabled)", cfg=self.config)
-            return
-
-        # 3) If focus is still inside the application -> NOT a real FocusOut.
-        # Advanced detection: check if the focused widget belongs to a window in this app.
-        try:
-            # focus_get() returns the widget if it is in this process
-            focused_widget = self.root.focus_get()
-            if focused_widget is not None:
-                debug_print(f"Focus Out prevented (focus on widget: {focused_widget})", cfg=self.config)
-                return
-                
-            # Further check via displayof (covers special cases with Toplevel)
-            focused_display = self.root.focus_displayof()
-            if focused_display is not None:
-                debug_print("Focus Out prevented (focus_displayof match)", cfg=self.config)
-                return
-
-            # Raw check of focused widget via Tcl (covers Combobox popdown)
-            raw_focus = self.root.tk.call('focus')
-            if raw_focus and ('.popdown' in str(raw_focus).lower() or '.tk_choice_list' in str(raw_focus).lower()):
-                debug_print(f"Focus Out prevented (focus on popdown: {raw_focus})", cfg=self.config)
-                return
-        except (KeyError, tk.TclError):
-            pass
-
-        # 4) If we are already faded, do not redo the fade
-        beh = self.config.get("behaviour", {})
-        target = beh.get("transparency_faded", 35) / 100
-        current_alpha = float(self.root.attributes("-alpha"))
-
-        if current_alpha <= target + 0.01:
-            debug_print("Focus Out prevented (already faded)", cfg=self.config)
-            return
-
-        debug_print(">>> REAL FOCUS OUT DETECTED <<<", cfg=self.config)
-        duration = int(beh.get("fade_duration_ms", 300))
-        debug_print(f"Fading {current_alpha} -> {target} in {duration} ms", cfg=self.config)
-
-        self.fader.fade(
-            start_alpha=current_alpha,
-            end_alpha=target,
-            duration_ms=duration
-        )
+        self.win_mgmt.on_focus_out(event)
 
     def _prevent_maximize(self, event):
-        # If window is maximized → restore saved geometry
-        if self.root.state() == "zoomed":
-            self.root.state("normal")
-            self.apply_geometry()
+        self.win_mgmt.prevent_maximize(event)
 
     def _disable_maximize(self):
-        """
-        Completely disables window maximization on Windows:
-        - removes the maximize button
-        - blocks double-click on title-bar
-        - blocks Win+Up Arrow
-        - avoids visual flash of window maximizing for an instant
-        """
-        try:
-            import ctypes
-
-            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
-
-            GWL_STYLE = -16
-            WS_MAXIMIZEBOX = 0x00010000
-            WS_THICKFRAME = 0x00040000  # maintains manual resizing
-
-            style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_STYLE)
-
-            # Removes only the ability to maximize, NOT resizing
-            style &= ~WS_MAXIMIZEBOX
-
-            ctypes.windll.user32.SetWindowLongW(hwnd, GWL_STYLE, style)
-
-        except Exception:
-            # On Linux or if ctypes doesn't work → silently ignore
-            pass
+        self.win_mgmt.disable_maximize()
 
     def _exit_app(self):
         self._is_exiting = True

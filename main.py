@@ -233,12 +233,8 @@ def release_lock():
 
 def main():
     if not acquire_lock():
-        # If another instance is running, just exit.
-        # On Wayland, bringing the existing instance to front is complex.
-        # The user will have to manually switch to the existing window.
         sys.exit(0)
 
-    # Ensure lock is released on exit
     import atexit
     atexit.register(release_lock)
 

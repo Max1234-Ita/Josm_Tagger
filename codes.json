@@ -548,5 +548,35 @@
             "key": "layer",
             "value": "-1"
         }
+    ],
+    "pper": [
+        {
+            "key": "amenity",
+            "value": "parking"
+        },
+        {
+            "key": "orientation",
+            "value": "perpendicular"
+        }
+    ],
+    "ppar": [
+        {
+            "key": "amenity",
+            "value": "parking"
+        },
+        {
+            "key": "orientation",
+            "value": "parallel"
+        }
+    ],
+    "pdia": [
+        {
+            "key": "amenity",
+            "value": "parking"
+        },
+        {
+            "key": "orientation",
+            "value": "diagonal"
+        }
     ]
 }

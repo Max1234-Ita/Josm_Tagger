@@ -424,6 +424,7 @@ class OptionsForm(BaseForm):
         )
         self.config.update(self.temp_config)
         save_config(self.config)
+        messagebox.showinfo("Restart Recommended", "Some options may require an application restart to take full effect.", parent=self)
         self.destroy()
 
     def _on_cancel(self):

@@ -36,12 +36,17 @@ def _version_key(version):
     return tuple(int(part) for part in numbers)
 
 
-def _is_remote_newer(current_version, remote_version):
-    current_key = _version_key(current_version)
-    remote_key = _version_key(remote_version)
-    if not current_key or not remote_key:
-        return False
-    return remote_key > current_key
+def get_latest_published_version():
+    try:
+        payload = _fetch_json(f"{GITHUB_REPO_API}/releases/latest")
+        return _extract_release_payload(payload)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            raise
+    tags = _fetch_json(f"{GITHUB_REPO_API}/tags?per_page=1")
+    if tags:
+        return _extract_tag_payload(tags[0])
+    return None
 
 
 def _extract_release_payload(payload):
@@ -69,19 +74,6 @@ def _extract_tag_payload(payload):
     }
 
 
-def get_latest_published_version():
-    try:
-        payload = _fetch_json(f"{GITHUB_REPO_API}/releases/latest")
-        return _extract_release_payload(payload)
-    except urllib.error.HTTPError as exc:
-        if exc.code != 404:
-            raise
-    tags = _fetch_json(f"{GITHUB_REPO_API}/tags?per_page=1")
-    if tags:
-        return _extract_tag_payload(tags[0])
-    return None
-
-
 def check_for_updates(current_version):
     try:
         published = get_latest_published_version()
@@ -101,7 +93,22 @@ def check_for_updates(current_version):
         }
 
     remote_version = published["version"]
-    if _is_remote_newer(current_version, remote_version):
+    current_key = _version_key(current_version)
+    remote_key = _version_key(remote_version)
+
+    if not current_key or not remote_key:
+        # If version keys can't be parsed, treat as up-to-date to avoid false positives
+        # or errors, though _version_key should handle most cases gracefully.
+        return {
+            "status": "up_to_date",
+            "current_version": current_version,
+            "latest_version": remote_version,
+            "url": published["url"],
+            "source": published["source"],
+            "message": "Version comparison failed, assuming up-to-date."
+        }
+
+    if remote_key > current_key:
         return {
             "status": "update_available",
             "current_version": current_version,
@@ -112,11 +119,20 @@ def check_for_updates(current_version):
             "source": published["source"],
             "published_at": published["published_at"],
         }
-
-    return {
-        "status": "up_to_date",
-        "current_version": current_version,
-        "latest_version": remote_version,
-        "url": published["url"],
-        "source": published["source"],
-    }
+    elif current_key > remote_key:
+        return {
+            "status": "newer_than_available",
+            "current_version": current_version,
+            "latest_version": remote_version,
+            "url": published["url"],
+            "source": published["source"],
+            "message": "Your installed version is newer than the latest available in the repository."
+        }
+    else: # current_key == remote_key
+        return {
+            "status": "up_to_date",
+            "current_version": current_version,
+            "latest_version": remote_version,
+            "url": published["url"],
+            "source": published["source"],
+        }
