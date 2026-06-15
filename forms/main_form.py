@@ -1736,6 +1736,11 @@ PY
     def _fade_then_minimize_to_tray(self):
         self.win_mgmt.fade_then_minimize_to_tray()
 
+    def _move_to_main_display(self):
+        """Moves the main window to coordinates (40, 40) on the primary display."""
+        self.root.geometry(f"+40+40")
+        self.restore_main_form() # Ensure it's visible and focused
+
     def _start_tray_icon(self):
         """Creates the tray icon using run_detached() from the GitHub version."""
         if self.tray_running:
@@ -1749,6 +1754,7 @@ PY
             "JOSM Tagger",
             menu=pystray.Menu(
                 pystray.MenuItem("Show", self._on_tray_restore, default=True),
+                pystray.MenuItem("Move to main display", self._move_to_main_display), # New option
                 pystray.MenuItem("Exit", self._on_tray_exit)
             )
         )
