@@ -370,6 +370,7 @@ class OptionsForm(BaseForm):
         self.josm_method_combobox.grid(
             row=0, column=1, columnspan=2, sticky="we", padx=(0, pad), pady=pad
         )
+        self.josm_method_combobox.bind("<<ComboboxSelected>>", self._on_josm_method_selected) # Bind event
 
         if is_linux():
             self.josm_method_combobox.state(["disabled"])
@@ -408,6 +409,19 @@ class OptionsForm(BaseForm):
             else:
                 messagebox.showerror("Error", "Select a file inside /resources", parent=self)
 
+    def _show_remote_control_message(self):
+        messagebox.showinfo(
+            "Remote Control Configuration",
+            "In order for Remote Control to work, the function must be enabled "
+            "and configured in JOSM menu (Edit > Preferences > Remote Control)",
+            parent=self
+        )
+
+    def _on_josm_method_selected(self, event):
+        selected_method_display = self.josm_control_method_var.get()
+        if selected_method_display == self.josm_control_method_map[JOSM_CONTROL_REMOTE]:
+            self._show_remote_control_message()
+
     def _on_ok(self):
         self._sync_theme_vars_to_bucket(self._current_theme_key)
         beh = self.temp_config.setdefault("behaviour", {})
@@ -416,14 +430,16 @@ class OptionsForm(BaseForm):
         beh["on_close"] = self.on_close_rev.get(self.on_close_var.get(), "minimize_to_tray")
         beh["transparency_active"] = int(self.transparency_active_var.get())
         beh["transparency_faded"] = int(self.transparency_faded_var.get())
-        self.temp_config["josm_control_method"] = resolve_control_method(
-            self.josm_control_method_rev.get(
-                self.josm_control_method_var.get(),
-                self.temp_config.get("josm_control_method"),
-            )
+        
+        selected_josm_method = self.josm_control_method_rev.get(
+            self.josm_control_method_var.get(),
+            self.temp_config.get("josm_control_method"),
         )
+        self.temp_config["josm_control_method"] = resolve_control_method(selected_josm_method)
+
         self.config.update(self.temp_config)
         save_config(self.config)
+
         messagebox.showinfo("Restart Recommended", "Some options may require an application restart to take full effect.", parent=self)
         self.destroy()
 
