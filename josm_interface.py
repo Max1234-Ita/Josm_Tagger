@@ -7,7 +7,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from config_manager import debug_print, is_debug_mode
+from config_manager import debug_print, is_debug_mode, load_config
 
 # Conditional import for Windows-specific libraries
 if platform.system() == "Windows":
@@ -30,7 +30,7 @@ JOSM_REMOTE_AUTO_CONFIRM = True
 JOSM_REMOTE_CONFIRM_DELAY = 0.7
 JOSM_CONTROL_GUI_AUTOMATION = "gui_automation"
 JOSM_CONTROL_REMOTE = "remote_control"
-JOSM_WINDOW_TITLE = "Java OpenStreetMap Editor"
+# JOSM_WINDOW_TITLE will be loaded from config or default to "Java OpenStreetMap Editor"
 DEBUG_MODE = is_debug_mode()
 
 
@@ -60,7 +60,8 @@ def _remote_control_request(path, params=None):
 
     debug_print(f"Calling JOSM Remote Control: {url}", cfg=DEBUG_MODE)
     try:
-        with urllib.request.urlopen(url, timeout=2) as response:
+        request = urllib.request.Request(url)
+        with urllib.request.urlopen(request, timeout=2) as response:
             body = response.read().decode("utf-8", errors="replace")
             debug_print(f"JOSM Remote Control status: {response.status}", cfg=DEBUG_MODE)
             if body:
@@ -179,6 +180,9 @@ def focus_josm(main_root=None):
         except Exception:
             pass
 
+    config = load_config()
+    josm_window_title = config.get("josm_window_title", "Java OpenStreetMap Editor")
+
     if is_linux():
         if main_root is not None:
             try:
@@ -189,8 +193,8 @@ def focus_josm(main_root=None):
                 pass
 
         for command in (
-            ["wmctrl", "-a", JOSM_WINDOW_TITLE],
-            ["xdotool", "search", "--name", JOSM_WINDOW_TITLE],
+            ["wmctrl", "-a", josm_window_title],
+            ["xdotool", "search", "--name", josm_window_title],
         ):
             if not shutil.which(command[0]):
                 continue
@@ -245,7 +249,7 @@ def focus_josm(main_root=None):
         print("pygetwindow not available, cannot focus JOSM.")
         return False
 
-    windows = gw.getWindowsWithTitle(JOSM_WINDOW_TITLE)
+    windows = gw.getWindowsWithTitle(josm_window_title)
 
     if not windows:
         return False
