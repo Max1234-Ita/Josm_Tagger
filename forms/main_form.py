@@ -1070,14 +1070,14 @@ PY
         messagebox.showinfo(
             "Linux shortcut helper",
             (
-                "JOSM Tagger ha creato un helper per il richiamo rapido:\n\n"
+                "JOSM Tagger has created a helper for quick launching:\n\n"
                 f"  {helper_path}\n\n"
-                "Configura la scorciatoia di sistema per eseguire quel file.\n"
-                "Flusso consigliato:\n"
-                "1. Avvia JOSM Tagger una volta con il launcher normale.\n"
-                "2. Associa la scorciatoia di sistema a ~/josmtagger.sh.\n"
-                "3. Da quel momento la scorciatoia riattiva l'istanza già aperta\n"
-                "   e non crea una nuova istanza."
+                "Set up your system shortcut to run that file.\n"
+                "Recommended flow:\n"
+                "1. Start JOSM Tagger once with the normal launcher.\n"
+                "2. Bind the system shortcut to ~/josmtagger.sh.\n"
+                "3. From then on, the shortcut reactivates the already open instance\n"
+                "   and does not create a new one."
             ),
             parent=self.root,
         )
@@ -1298,15 +1298,31 @@ PY
                 except Exception:
                     pass
 
+    def _show_josm_remote_control_warning(self, details=None):
+        message = (
+            "JOSM did not accept the Remote Control request.\n\n"
+            "Make sure JOSM is running and Remote Control is enabled, then try again later."
+        )
+        if details:
+            message += f"\n\nDetails: {details}"
+
+        messagebox.showwarning(
+            "JOSM unavailable",
+            message,
+            parent=self.root,
+        )
+
     def send(self, code):
 
         self._sending_in_progress = True
         self._block_focus_out = True
         self._render_preview(code)
         sent_ok = False
+        send_error = None
+        send_aborted = False
 
         def worker():
-            nonlocal sent_ok
+            nonlocal sent_ok, send_error, send_aborted
             # Conditional import of pyautogui for Windows only
             if sys.platform.startswith("win"):
                 import pyautogui
@@ -1359,6 +1375,7 @@ PY
                     self.allow_minimize = True
                     self.allow_fade = True
                     self._block_focus_out = False
+                    send_aborted = True
                     return
 
                 sent_ok = send_tags(
@@ -1366,19 +1383,33 @@ PY
                     main_root=self.root,
                     control_method=control_method, # Use the determined control_method
                 )
+            except Exception as e:
+                sent_ok = False
+                send_error = e
+                debug_print(f"Send failed: {e}", cfg=self.config)
 
             finally:
 
                 # HERE: done() sees generic_found and tags_list because it's in the same scope
                 def done():
-                    self._promote_code(code)
-                    self._reset_input()
-
-                    if generic_found and not generic_warning_shown:
-                        self._show_generic_tags_warning()
+                    if send_aborted:
+                        return
 
                     if sent_ok:
-                        focus_josm(main_root=self.root)
+                        self._promote_code(code)
+                        self._reset_input()
+
+                        if generic_found and not generic_warning_shown:
+                            self._show_generic_tags_warning()
+
+                        try:
+                            focus_josm(main_root=self.root)
+                        except Exception as e:
+                            debug_print(f"Could not refocus JOSM after send: {e}", cfg=self.config)
+                    else:
+                        if control_method == "remote_control":
+                            details = str(send_error) if send_error else None
+                            self._show_josm_remote_control_warning(details=details)
 
                     self._sending_in_progress = False
                     self.allow_minimize = True
@@ -1738,6 +1769,14 @@ PY
 
     def _move_to_main_display(self):
         """Moves the main window to coordinates (40, 40) on the primary display."""
+        confirm = messagebox.askyesno(
+            "Move to main display",
+            "Move the window to the main display?",
+            parent=self.root,
+        )
+        if not confirm:
+            return
+
         self.root.geometry(f"+40+40")
         self.restore_main_form() # Ensure it's visible and focused
 
