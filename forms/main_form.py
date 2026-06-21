@@ -1125,7 +1125,9 @@ PY
         self.root.update_idletasks()
         self.root.lift()
         self.root.attributes("-topmost", True)
-        self.root.after(25, lambda: self.root.attributes("-topmost", False))
+
+        if not self._should_keep_form_visible():
+            self.root.after(25, lambda: self.root.attributes("-topmost", False))
         
         # Aggressive focus: multiple attempts with increasing delays for .exe compatibility
         self.root.after(0, self.win_mgmt.force_focus)
@@ -1297,6 +1299,10 @@ PY
                     self.root.attributes("-topmost", previous_topmost)
                 except Exception:
                     pass
+
+    def _should_keep_form_visible(self):
+        beh = self.config.get("behaviour", {})
+        return beh.get("on_apply", "keep_visible") == "keep_visible"
 
     def _show_josm_remote_control_warning(self, details=None):
         message = (
@@ -1828,7 +1834,9 @@ PY
         self.root.update_idletasks()
         self.root.lift()
         self.root.attributes("-topmost", True)
-        self.root.after(50, lambda: self.root.attributes("-topmost", False))
+
+        if not self._should_keep_form_visible():
+            self.root.after(50, lambda: self.root.attributes("-topmost", False))
 
         # Aggressive focus: multiple attempts with increasing delays for .exe compatibility
         self.root.after(0, self.win_mgmt.force_focus)

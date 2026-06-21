@@ -52,6 +52,16 @@ def resolve_control_method(control_method=None):
     return JOSM_CONTROL_GUI_AUTOMATION
 
 
+def _should_keep_main_form_visible():
+    try:
+        config = load_config()
+    except Exception:
+        return False
+
+    beh = config.get("behaviour", {})
+    return beh.get("on_apply", "keep_visible") == "keep_visible"
+
+
 def _remote_control_request(path, params=None):
     query = urllib.parse.urlencode(params or {})
     url = f"{JOSM_REMOTE_BASE_URL}{path}"
@@ -173,7 +183,7 @@ def send_tags_gui_automation(pairs, main_root=None):
 
 def focus_josm(main_root=None):
     def _release_topmost():
-        if main_root is None:
+        if main_root is None or _should_keep_main_form_visible():
             return
         try:
             main_root.attributes("-topmost", False)
@@ -235,7 +245,7 @@ def focus_josm(main_root=None):
                     stderr=subprocess.DEVNULL,
                     timeout=2,
                 )
-                if main_root is not None:
+                if main_root is not None and not _should_keep_main_form_visible():
                     main_root.after(100, _release_topmost)
                 time.sleep(0.2)
                 return True
@@ -274,7 +284,7 @@ def focus_josm(main_root=None):
         win.restore()
         win.activate()
 
-    if main_root is not None:
+    if main_root is not None and not _should_keep_main_form_visible():
         main_root.after(100, _release_topmost)
 
     time.sleep(0.3)
