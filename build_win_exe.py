@@ -4,14 +4,27 @@
 
 import subprocess
 import os
+import sys
 
 from pathlib import Path
 import shutil
+
 
 def build_exe():
     # Main script path
 
     main_script = "main.py"
+
+    sourcedir = Path(__file__).parent
+    print(f'Source directory: {sourcedir}')
+
+    targetdir = Path(sourcedir / 'dist')
+    targetdir_setup = Path(sourcedir / 'dist_installer')
+
+    print(f'Target directory: {targetdir}')
+
+    shutil.rmtree(targetdir, ignore_errors=True)
+    shutil.rmtree(targetdir_setup, ignore_errors=True)
 
     # Check if the file exists
     if not os.path.exists(main_script):
@@ -53,12 +66,6 @@ def build_exe():
             "resources",
         ]
 
-        sourcedir = Path(__file__).parent
-        print(f'Source directory: {sourcedir}')
-
-        targetdir = Path(sourcedir / 'dist')
-        print(f'Target directory: {targetdir}')
-
         for item in files_to_copy:
             src = sourcedir / item
 
@@ -89,15 +96,27 @@ def build_exe():
         print(f"\nCreating ZIP archive: {zip_path}.zip")
 
         shutil.make_archive(
-            base_name=str(zip_temp),  # senza .zip
+            base_name=str(zip_temp),  #  without .zip
             format="zip",
-            root_dir=dist_dir  # zippa tutto il contenuto di dist
+            root_dir=dist_dir  # zip everything inside dist folder.
         )
 
         final_zip = dist_dir / "Josm_Tagger.zip"
-        shutil.move(f"{zip_temp}.zip", final_zip)
-
+        shutil.move(f"{zip_temp}.zip", final_zip)   # This will be the .zip distro
         print(f"ZIP created successfully at: {final_zip}")
+
+        # -------------------------------------------------------------------------
+        # Build the installer
+        print("\nBuilding the Windows installer...")
+        installer_script = sourcedir / "build_win_installer.py"
+        try:
+            subprocess.run([sys.executable, str(installer_script)], check=True)
+            print("Windows installer build completed.")
+        except subprocess.CalledProcessError as e:
+            print(f"Error during installer build: {e}")
+        except FileNotFoundError:
+            print(f"Error: {installer_script} not found.")
+
     else:
         print("Build failed. Please check the error messages above.")
 

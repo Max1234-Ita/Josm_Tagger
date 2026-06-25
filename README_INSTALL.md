@@ -93,6 +93,16 @@ python build_exe.py
 
 Output atteso: eseguibile in `dist/JOSM_Tagger.exe`.
 
+### Windows (installer Inno Setup)
+
+Per generare l'installer e leggere automaticamente la versione da `app_metadata.py`:
+
+```powershell
+python build_win_installer.py
+```
+
+Output atteso: installer in `dist_installer`.
+
 ### Linux (PyInstaller)
 
 Su Linux usa direttamente `pyinstaller` (su Linux il separatore di `--add-data` è `:`):
