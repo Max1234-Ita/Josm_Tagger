@@ -1,28 +1,25 @@
 <br>
 <img src="resources/josm_tagger_120.png" alt="img" width="70" style="vertical-align:middle;">
 <h1 style="display:inline-block; margin-left:10px;">
-JOSM-...What?!?</h1>
+JOSM-What?!?</h1>
 
+I love mapping on OpenStreetMap and my favorite editor is **JOSM**.
 
-If you like mapping on OpenStreetMap and use **JOSM**, perhaps you find yourself having to frequently apply groups of tags in a recurring way, such as *highway=service* with *access=private*, or *tunnel=culvert* and *layer=-1*)
+Unfortunately, I often need to map etherogeneous elements in the same session: roads, waterways, forests, buildings and their features (entrances, gates, driveways, garages). 
 
----
+The editor's User Interface is powerful but it slows me down, despite I use v ery much the keyboard shortcuts: every time I have to manually add the tags one by one... it's so frustrating!
 
-## *The problem... to me, at least*
-It happens to me very often, and every time I feel myself slown down by the editor's User Interface slows, despite I use keyboard shortcuts: 
- - Open the insert window with *Alt-A*, type the key (or part of it and wait for autocompletion), *Tab *to move to the next textbox, insert the value (or part of it and wait again for autocompletion), *Enter* to confirm (or *Shift-Enter* to apply and keep the window open) and so on... it's a frustrating task!
+I also tried defining presets: that's useful but not very fast: once the preset is created, I still have to look for the one I need and select it from a list. Too slow!
 
- - Defining presets is also useful but not very fast: once the presets are created, I still have to look for the one I want and select it.
+Copy the tags from an existing object and paste them *Shift-Ctrl-V*? Yes, I tried that too, of course, and it's one of my favorite techniques; unfortunately it works just for the copied element. Too limited!
 
- - Copy an existing object and paste only the tags with *Shift-Ctrl-V*? Yes, of course, but it speeds up my mapping just for the copied element.
-
- - Repeat the last operation with *Shift-R*? As above, it only works if the last item selected is the one I'm interested in.
+Also repeating the last operation with *Shift-R* is handy, but only works when the new element the same as the last selected one: for instance: click a Gate (*barrier=gate*), then create a new node, select it and hit Shift-R to make an new Gate of it. Too limited, again!
 
 ---
 
-## *The solution... to me again, at least*
+## *The idea*
 
-I then asked myself: "why can't I activate a window with a hotkey andlike if it was command line interface, recall a group of predefined tags, identifying them with a mnemonic code I can easily remember and quickly type?"
+One day I asked myself: "*why can't I use a hotkey, such as Ctrl-0 to activate a window, and "launch" from there some mnemonic command, easy to remember and fast to type, to apply one or more tags to the element(s) I have selected in JOSM?*"
 
 <br>
 
@@ -32,15 +29,25 @@ For this reason, I created **JOSM Tagger**:
   <img src="resources/doc/pub/main_form_acp.png" style="box-shadow: 0 0 10px rgba(0,0,0,0.5);">
 </p>
 
-Once the program starts, I can call the main window by pressing Ctrl-0 and immediately type the code corresponding to the tag (or group of tags) I want to insert. 
-To confirm, just press Enter and JOSM Tagger will do the rest: all it takes is for JOSM to select at least one object to apply the tags to.
+Once the program starts, it will stay visible on top of the other windows (you can configure it to partially or totally disappear, however).
 
-Of course, the program doesn't allow you to apply only the tag groups I've defined for my needs; you can also create new ones and modify existing ones, and if you want to know if a group with the desired tags already exists, there's also a tool to search for the keys and values you're interested in.
+You can normally work with JOSM but, when you come across an element which is encoded in JOSM Tagger, here comes the "magic": 
+
+- **Select** that element in JOSM; 
+- Click the main program window or just press Ctrl-0 to **recall JOSM Tagger**;
+- **Type** the code corresponding to the tag (or group of tags) to be added;
+- **Press Enter** to confirm!
+
+JOSM Tagger will do the rest and apply all the tags associated with the recalled group.
+
+The program comes with several tag groups I've defined for my personal needs; you can edit them or create new ones, of course!
+
+...And if you need to know whether a group with the desired tags already exists or not, there's also a tool to Search Tool with filtering capabilities.
 
 ---
 
-## *And now... "à vous!" (if you like, of course)*
-Now that "on my computer" everything seems to work fine,  it's time to share it; Hope it will help you too!
+## *And now... "à vous!" (if you like)*
+After working on it for some time, the program has now reached the state where "everything works... on my computer", so now  it's time for sharing; hope it will help you too!
 
 Max
 
@@ -49,11 +56,12 @@ Max
 
 ---
 
-<br>
 
-## Disclaimer
+# Disclaimer
 
-This program is distributed "as-is". It was developed in Windows andall the described features *should* work as described.
+This program is distributed "*as-is*". 
+
+JOSM Tagger was originally developed in Windows and all the described features *should* work as described here and in the documentation.
 
 A Linux version is also available: it should work too, but there's some restriction, as the hotkey might not work, depending on the graphic environment:
 
@@ -64,14 +72,20 @@ A Linux version is also available: it should work too, but there's some restrict
 
 ## Some nerdy facts :-)
 
-- Josm Tagger is written in Python 3 (3.12-3.14), with some help from several AI engines (mainly Codex by OpenAI)
+- Josm Tagger is written in Python 3 (3.12-3.14), with some help from several AI engines (mainly Codex by OpenAI); it communicates wiyh JOSM through the native Remote Control interface; Optionally, it can use GUI automation features (only in Windows) to emulate user interaction through the regular controls.
 
-- Developing the core feature (sending specified tags to JOSM) took just a couple of hours in February 2026, thanks to the AI contribution in building up the whole main form layout and transmission/control routines
+- Developing the core feature (sending specified tags to JOSM) took just a couple of hours in February 2026, thanks to the AI contribution in building up the whole main form layout and transmission/control routines.
 
-- Making everything work as I wished, with proper logics and without critical glitches, took about four months... thanks to the AI stupidity (seriously, don't expect miracles from those engines)... OK, I worked on this project during my spare time, in the weekends, etc., that's still a huge time respect to the amount I dedicated to the core feature.
+- Making everything work as I wanted, with proper logics and without critical glitches, took about four months, thanks to the AI's stupidity... seriously, don't expect miracles from those engines!.   
+  
+  OK, I worked on this project during my spare time, mainky in the weekends, that's still a huge time respect to the amount I dedicated to the core feature.
 
-- The worst AI engine that participated in this project is ChatGPT.  
+- While building JOSM Tagger, I also wanted to know a little more about the IA engines and test some of them (at least in their free version), so now I've learned that...
 
-- The AI Engine that fixed most of the bugs in this project was Codex: it has very good code analysis capabilities an can provide a working solution in a reasonable time.  
+	- <u>The AI that fixed the most bugs</u> in this project was **Codex**: it has very good code analysis capabilities an can provide a working solution in a reasonable time; This is also the engine I used to implement new features into the app.
+	
+	- **Gemini** helped too, but it's slower and somehow less efficient; I still think that Codex is working better.  
 
-- How about GitHub Copilot? It participated too, of course! I found it quite good at creating form layouts starting from mockup pictures, but when it came to generating the code behind the controls, it started losing the overall view and increasing the level of Entropy, instead of reducing it.
+	- How about **GitHub Copilot**? It participated too, of course! I found it's </u>quite good at creating form layouts</u> starting from mockup pictures, but when it had generate the code behind the controls, it started losing the overall view and increasing the level of Entropy, instead of reducing it.
+	
+	- <u>The worst AI</u> that participated in this project is **ChatGPT**.  
